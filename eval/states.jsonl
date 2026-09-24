@@ -1,0 +1,22 @@
+{"id": "1", "state": {"buffer": "translate hello into Spanish"}, "label": "translate", "language": "en"}
+{"id": "2", "state": {"buffer": "translate this into French: hello"}, "label": "translate", "language": "en"}
+{"id": "3", "state": {"buffer": "rewrite this to be friendlier: please respond"}, "label": "rewrite", "language": "en"}
+{"id": "4", "state": {"buffer": "make this more professional: send it over"}, "label": "rewrite", "language": "en"}
+{"id": "5", "state": {"buffer": "summarize this document"}, "label": "summarize-selection", "language": "en"}
+{"id": "6", "state": {"buffer": "give me a summary"}, "label": "summarize-selection", "language": "en"}
+{"id": "7", "state": {"buffer": "draft an email to the team"}, "label": "draft-email", "language": "en"}
+{"id": "8", "state": {"buffer": "draft a reply thanking Sam"}, "label": "draft-email", "language": "en"}
+{"id": "9", "state": {"buffer": "schedule a meeting tomorrow"}, "label": "calendar-event", "language": "en"}
+{"id": "10", "state": {"buffer": "create a calendar event"}, "label": "calendar-event", "language": "en"}
+{"id": "11", "state": {"buffer": "search for weather in Austin"}, "label": "web-search", "language": "en"}
+{"id": "12", "state": {"buffer": "look up mechanical keyboards"}, "label": "web-search", "language": "en"}
+{"id": "13", "state": {"buffer": "extract action items from the notes"}, "label": "extract-action-items", "language": "en"}
+{"id": "14", "state": {"buffer": "extract tasks from this transcript"}, "label": "extract-action-items", "language": "en"}
+{"id": "15", "state": {"buffer": "save notes as meeting.md"}, "label": "file-save", "language": "en"}
+{"id": "16", "state": {"buffer": "save this as a file"}, "label": "file-save", "language": "en"}
+{"id": "17", "state": {"buffer": "The sky looks nice today"}, "label": "NO_ROUTE", "language": "en"}
+{"id": "18", "state": {"buffer": "I had a good weekend"}, "label": "NO_ROUTE", "language": "en"}
+{"id": "19", "state": {"buffer": "let total = 10;"}, "label": "NO_ROUTE", "language": "en"}
+{"id": "20", "state": {"buffer": "Happy birthday!"}, "label": "NO_ROUTE", "language": "en"}
+{"id": "21", "state": {"buffer": "Bonjour tout le monde"}, "label": "NO_ROUTE", "language": "fr"}
+{"id": "22", "state": {"buffer": "\u4eca\u65e5\u306f\u3044\u3044\u5929\u6c17\u3067\u3059"}, "label": "NO_ROUTE", "language": "ja"}
