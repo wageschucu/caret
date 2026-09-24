@@ -1,6 +1,6 @@
 import AppKit
 
-/// The one activating window: exact preview, missing-slot fields, confirm/cancel.
+/// The preview: exact action, missing-slot fields, confirm/cancel. A non-activating key panel.
 /// Enter confirms only here. Esc cancels.
 final class PreviewPanel: NSPanel, NSWindowDelegate {
   var onSubmit: ([String: String]) -> Void = { _ in }
@@ -11,11 +11,16 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
 
   init() {
     super.init(
-      contentRect: NSRect(x: 0, y: 0, width: 520, height: 320), styleMask: [.titled, .closable, .fullSizeContentView],
+      contentRect: NSRect(x: 0, y: 0, width: 520, height: 320),
+      styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
       backing: .buffered, defer: false)
     title = "Caret"
     titlebarAppearsTransparent = true
+    // Takes keyboard focus without activating Caret, which macOS 14+ would refuse anyway
+    // for an app the user did not just launch. The host app stays active underneath.
     level = .floating
+    becomesKeyOnlyIfNeeded = false
+    hidesOnDeactivate = false
     isReleasedWhenClosed = false
     collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     delegate = self
@@ -25,6 +30,9 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
     stack.edgeInsets = NSEdgeInsets(top: 36, left: 18, bottom: 16, right: 18)
     contentView = stack
   }
+
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     onCancel()
@@ -151,8 +159,8 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
     setFrame(
       NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2, width: size.width, height: size.height),
       display: true)
-    NSApp.activate(ignoringOtherApps: true)
-    makeKeyAndOrderFront(nil)
+    orderFrontRegardless()
+    makeKey()
   }
 
   @objc private func submit() {

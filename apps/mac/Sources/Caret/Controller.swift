@@ -426,8 +426,10 @@ final class Controller {
   }
   private var _lastUndo: String?
 
+  /// The preview is a non-activating panel, so the host app normally stays active. Re-activate it
+  /// only if something else took over meanwhile.
   private func returnFocus() async {
-    if let app = previousApp, app != NSRunningApplication.current {
+    if let app = previousApp, NSWorkspace.shared.frontmostApplication != app {
       app.activate()
       try? await Task.sleep(for: .milliseconds(120))
     }

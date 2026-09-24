@@ -10,8 +10,8 @@ final class StatusWindow: NSPanel {
 
   init() {
     super.init(
-      contentRect: NSRect(x: 0, y: 0, width: 420, height: 160), styleMask: [.titled, .closable],
-      backing: .buffered, defer: false)
+      contentRect: NSRect(x: 0, y: 0, width: 420, height: 160),
+      styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
     title = "Caret"
     level = .floating
     isReleasedWhenClosed = false
@@ -38,13 +38,15 @@ final class StatusWindow: NSPanel {
     contentView = stack
   }
 
+  override var canBecomeKey: Bool { true }
+
   func update(status: String, needsAttention: Bool) {
     label.stringValue = status
     if needsAttention {
       if !isVisible {
         center()
-        NSApp.activate(ignoringOtherApps: true)
-        makeKeyAndOrderFront(nil)
+        orderFrontRegardless()
+        makeKey()
       }
     } else {
       orderOut(nil)
