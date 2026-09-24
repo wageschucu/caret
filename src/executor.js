@@ -46,7 +46,7 @@ function demoPlan(skill, context, fields) {
       fields.text ||
       context.selection ||
       context['focused-window']?.text ||
-      buffer.split(':').slice(1).join(':').trim();
+      buffer.slice(buffer.lastIndexOf(':') + 1).trim();
   let text = '',
     missing = [],
     calls = [];

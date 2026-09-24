@@ -34,6 +34,10 @@ struct FocusSnapshot {
     if let range = slice.range(of: lineOnly ? "\n" : "\n\n", options: .backwards) {
       slice = String(slice[range.upperBound...])
     }
+    // Terminal lines start with a shell prompt; drop it so only the typed command remains.
+    if lineOnly, let prompt = slice.range(of: #"^[^\n]{0,120}?[$%#>] "#, options: .regularExpression) {
+      slice = String(slice[prompt.upperBound...])
+    }
     if slice.count > 2000 { slice = String(slice.suffix(2000)) }
     return slice
   }
