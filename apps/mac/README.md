@@ -11,7 +11,18 @@ npm start                 # the helper, from the repository root
 apps/mac/build.sh --run   # builds build/Caret.app and launches it
 ```
 
-On first launch macOS asks for **Accessibility** permission (System Settings → Privacy & Security → Accessibility). Caret is inert until it is granted; the menu-bar item (↗) shows the current status. The app is ad-hoc signed with a fixed identifier so the grant survives rebuilds.
+On first launch macOS asks for **Accessibility** permission (System Settings → Privacy & Security → Accessibility). Caret is inert until it is granted; the menu-bar item (↗) shows the current status.
+
+### Keeping the grant across rebuilds
+
+macOS ties the grant to the app's code signature. With the default ad-hoc signature every rebuild is a new signature, so the switch in System Settings stays on but no longer applies; remove Caret from the list and add `apps/mac/build/Caret.app` again (or run `tccutil reset Accessibility com.paulgettel.caret` and relaunch).
+
+To avoid that, sign with a stable identity once:
+
+1. Keychain Access → Certificate Assistant → Create a Certificate… Name `Caret Dev`, Identity Type *Self Signed Root*, Certificate Type *Code Signing*.
+2. Build with `CARET_SIGN_IDENTITY="Caret Dev" apps/mac/build.sh --run`.
+
+The first launch after switching identities needs one more grant; after that rebuilds keep it.
 
 ## What it does
 

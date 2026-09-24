@@ -28,8 +28,12 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 </dict>
 </plist>
 EOF
-# Ad-hoc signature with a stable identifier so the Accessibility grant survives rebuilds.
-codesign --force --sign - --identifier com.paulgettel.caret "$APP" >/dev/null
+# Sign. An ad-hoc signature ("-") changes with every build, and macOS ties the Accessibility
+# grant to the signature, so each rebuild must be re-approved. Set CARET_SIGN_IDENTITY to the
+# name of a code-signing certificate (a self-signed one from Keychain Access is enough) to keep
+# a stable identity across rebuilds.
+codesign --force --sign "${CARET_SIGN_IDENTITY:--}" --identifier com.paulgettel.caret "$APP" >/dev/null
+[ -n "${CARET_SIGN_IDENTITY:-}" ] && echo "signed with $CARET_SIGN_IDENTITY" || echo "ad-hoc signed (Accessibility must be re-granted after each rebuild; see README)"
 echo "built $APP"
 if [ "${1:-}" = "--run" ]; then
   pkill -x Caret 2>/dev/null || true

@@ -50,8 +50,13 @@ final class Controller {
     waitForTrust()
   }
 
+  private var promptedForTrust = false
+
   private func waitForTrust() {
-    if AccessibilityReader.isTrusted(prompt: true) {
+    // Show the system prompt once; afterwards poll silently until the user flips the switch.
+    let trusted = AccessibilityReader.isTrusted(prompt: !promptedForTrust)
+    promptedForTrust = true
+    if trusted {
       if tap.start() {
         status()
       } else {
@@ -59,7 +64,7 @@ final class Controller {
       }
       return
     }
-    onStatus("Waiting for Accessibility permission…")
+    onStatus("Waiting for Accessibility permission… (if Caret is already listed, remove and re-add it)")
     Task {
       try? await Task.sleep(for: .seconds(2))
       waitForTrust()
