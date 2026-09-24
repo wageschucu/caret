@@ -1,15 +1,16 @@
 {
   "mode": "live-jev",
-  "dataset_hash": "6efa460a9611eaed32e90fabfaefcc1adef6e46d09589d732b455b5008ee0f98",
-  "registry_hash": "7b0ddf9e7d091425143082744e8ec179f99f44b41a725308e522d6203a9ac6ca",
+  "dataset_hash": "7df62a327a21bf4af323e1874acd40cb82ea0e5826e4b75ad8e123f157805c18",
+  "registry_hash": "6b2d91b6baf0e83ad3206ba22628865781876c6659a9e7ec09efd3e28798b738",
   "thresholds_version": "v0.3-1",
-  "total": 22,
+  "total": 32,
+  "stale_skipped": 0,
   "false_route_rate": 0,
   "missed_route_rate": 0,
   "wrong_route_count": 0,
   "confusion_matrix": {
     "translate": {
-      "translate": 2
+      "translate": 7
     },
     "rewrite": {
       "rewrite": 2
@@ -18,10 +19,10 @@
       "summarize-selection": 2
     },
     "draft-email": {
-      "draft-email": 2
+      "draft-email": 3
     },
     "calendar-event": {
-      "calendar-event": 2
+      "calendar-event": 3
     },
     "web-search": {
       "web-search": 2
@@ -33,13 +34,13 @@
       "file-save": 2
     },
     "NO_ROUTE": {
-      "NO_ROUTE": 6
+      "NO_ROUTE": 9
     }
   },
   "per_language": {
     "en": {
-      "total": 20,
-      "correct": 20
+      "total": 30,
+      "correct": 30
     },
     "fr": {
       "total": 1,
@@ -54,16 +55,16 @@
     {
       "lower": 0,
       "upper": 0.1,
-      "n": 16,
+      "n": 23,
       "no_route": 0,
       "observed_no_route_rate": 0
     },
     {
       "lower": 0.1,
       "upper": 0.2,
-      "n": 0,
-      "no_route": 0,
-      "observed_no_route_rate": null
+      "n": 2,
+      "no_route": 2,
+      "observed_no_route_rate": 1
     },
     {
       "lower": 0.2,
@@ -89,9 +90,9 @@
     {
       "lower": 0.5,
       "upper": 0.6,
-      "n": 0,
-      "no_route": 0,
-      "observed_no_route_rate": null
+      "n": 1,
+      "no_route": 1,
+      "observed_no_route_rate": 1
     },
     {
       "lower": 0.6,
@@ -285,6 +286,80 @@
       "id": "22",
       "label": "NO_ROUTE",
       "shown": [],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-0e7134f2",
+      "label": "translate",
+      "shown": [
+        "translate"
+      ],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-b7189cc1",
+      "label": "draft-email",
+      "shown": [
+        "draft-email"
+      ],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-aaa0a1a7",
+      "label": "NO_ROUTE",
+      "shown": [],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-743fd9a2",
+      "label": "NO_ROUTE",
+      "shown": [],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-da20ac48",
+      "label": "NO_ROUTE",
+      "shown": [],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-4152f97c",
+      "label": "translate",
+      "shown": [
+        "translate"
+      ],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-fb5e182a",
+      "label": "translate",
+      "shown": [
+        "translate"
+      ],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-684586c3",
+      "label": "calendar-event",
+      "shown": [
+        "calendar-event"
+      ],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-2e57511e",
+      "label": "translate",
+      "shown": [
+        "translate"
+      ],
+      "model": "jev-1.13.0"
+    },
+    {
+      "id": "real-14dd3a7d",
+      "label": "translate",
+      "shown": [
+        "translate"
+      ],
       "model": "jev-1.13.0"
     }
   ]
