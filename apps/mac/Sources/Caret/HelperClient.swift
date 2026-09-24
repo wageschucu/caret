@@ -1,0 +1,165 @@
+import Foundation
+
+/// Client for the Node helper's loopback HTTP API. Mirrors public/app.js.
+final class HelperClient {
+  struct Skill: Decodable {
+    let slug: String
+    let label: String?
+    let description: String
+    let side_effect_class: String
+    let active: Bool
+  }
+  struct Bootstrap: Decodable {
+    let token: String
+    let mode: String
+    let executor: String
+    let problems: [String]?
+    let skills: [Skill]
+  }
+  struct RouteResult: Decodable {
+    let event_id: String
+    let shown: [String]
+    let mode: String
+  }
+  struct Completion: Decodable {
+    let text: String?
+    let mode: String?
+    let phrase_boundary: Bool?
+    let error: String?
+  }
+  /// Preview or done. Fields are optional because the helper returns one of two shapes.
+  struct Execution {
+    let status: String
+    let id: String?
+    let skill: String
+    let preview: String?
+    let missingSlots: [String]
+    let calls: [[String: Any]]
+    let requiresConfirmation: Bool
+    let demo: Bool
+    let result: String?
+    let undoID: String?
+  }
+  struct HelperError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+  }
+
+  private let base: URL
+  private let session: URLSession
+  private(set) var token = ""
+  private(set) var skills: [Skill] = []
+
+  init(base: URL) {
+    self.base = base
+    let config = URLSessionConfiguration.ephemeral
+    config.timeoutIntervalForRequest = 30
+    session = URLSession(configuration: config)
+  }
+
+  func label(for slug: String) -> String {
+    skills.first { $0.slug == slug }?.label ?? slug
+  }
+
+  func skill(_ slug: String) -> Skill? { skills.first { $0.slug == slug } }
+
+  func bootstrap() async throws -> Bootstrap {
+    let (data, response) = try await session.data(from: base.appendingPathComponent("api/bootstrap"))
+    try check(response, data)
+    let boot = try JSONDecoder().decode(Bootstrap.self, from: data)
+    token = boot.token
+    skills = boot.skills
+    return boot
+  }
+
+  private func request(_ endpoint: String, _ body: [String: Any]) throws -> URLRequest {
+    var request = URLRequest(url: base.appendingPathComponent("api/\(endpoint)"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(token, forHTTPHeaderField: "X-SkillRouter-Session")
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    return request
+  }
+
+  private func check(_ response: URLResponse, _ data: Data) throws {
+    guard let http = response as? HTTPURLResponse else { throw HelperError(message: "No response from helper") }
+    if http.statusCode >= 400 {
+      let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+      throw HelperError(message: message ?? "Helper error \(http.statusCode)")
+    }
+  }
+
+  private func post(_ endpoint: String, _ body: [String: Any]) async throws -> Data {
+    let (data, response) = try await session.data(for: try request(endpoint, body))
+    try check(response, data)
+    return data
+  }
+
+  private func postJSON(_ endpoint: String, _ body: [String: Any]) async throws -> [String: Any] {
+    let data = try await post(endpoint, body)
+    return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+  }
+
+  func route(state: [String: Any], boundary: Int) async throws -> RouteResult {
+    try JSONDecoder().decode(RouteResult.self, from: try await post("route", ["state": state, "boundary": boundary]))
+  }
+
+  /// Streams ghost-text updates (NDJSON). Ends at the helper's phrase/token/time limit or on cancellation.
+  func complete(state: [String: Any]) -> AsyncThrowingStream<Completion, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let (bytes, response) = try await session.bytes(for: try request("complete", ["state": state]))
+          try check(response, Data())
+          for try await line in bytes.lines {
+            guard !line.isEmpty, let data = line.data(using: .utf8) else { continue }
+            let chunk = try JSONDecoder().decode(Completion.self, from: data)
+            if let error = chunk.error { throw HelperError(message: error) }
+            continuation.yield(chunk)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
+  }
+
+  func dismiss(buffer: String, eventID: String?) async {
+    _ = try? await post("dismiss", ["buffer": buffer, "event_id": eventID ?? NSNull()])
+  }
+
+  func telemetry(_ action: String, eventID: String?, latencyMs: Double? = nil) {
+    Task {
+      _ = try? await post(
+        "telemetry", ["action": action, "event_id": eventID ?? NSNull(), "latency_ms": latencyMs ?? NSNull()])
+    }
+  }
+
+  func prepare(eventID: String, skill: String, buffer: String, fields: [String: String], previous: String?)
+    async throws -> Execution
+  {
+    var body: [String: Any] = ["event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields]
+    if let previous { body["previous_preview"] = previous }
+    return Self.execution(try await postJSON("prepare", body))
+  }
+
+  func confirm(id: String) async throws -> Execution { Self.execution(try await postJSON("confirm", ["id": id])) }
+  func cancel(id: String) async { _ = try? await post("cancel", ["id": id]) }
+  func undo(id: String) async throws { _ = try await post("undo", ["id": id]) }
+
+  private static func execution(_ json: [String: Any]) -> Execution {
+    Execution(
+      status: json["status"] as? String ?? "",
+      id: json["id"] as? String,
+      skill: json["skill"] as? String ?? "",
+      preview: json["preview"] as? String,
+      missingSlots: json["missing_slots"] as? [String] ?? [],
+      calls: json["calls"] as? [[String: Any]] ?? [],
+      requiresConfirmation: json["requires_confirmation"] as? Bool ?? false,
+      demo: json["demo"] as? Bool ?? false,
+      result: json["result"] as? String,
+      undoID: json["undo_id"] as? String)
+  }
+}

@@ -3,3 +3,5 @@ node_modules/
 .skillrouter/
 output/
 *.log
+apps/mac/.build/
+apps/mac/build/
