@@ -73,10 +73,18 @@ Some effects belong to the host, not the helper: `calendar.create` is performed 
 
 ## Milestones
 
-1. **Read**: menu-bar app, permission prompts, AX reader that logs `state` for the focused field. Verify in TextEdit, Safari, Mail, Notes, VS Code, Terminal.
-2. **Show**: overlay panel at the caret with demo ghost text from the helper.
-3. **Accept**: event tap; Tab inserts ghost text; Esc dismisses.
-4. **Route**: chips, ↑/↓, Tab → preview panel → confirm; `translate hello into Spanish` works end to end in TextEdit.
-5. **Context**: focus-change ring buffer, deny list, secure-field exclusion, Tab-safety list.
+1. **Read** — done 2026-09-24. Verified: TextEdit, Brave, Terminal, Telegram, Mail (WebKit range read). Pending: Safari, Notes, VS Code.
+2. **Show** — done.
+3. **Accept** — done. Key tap on its own thread so slow Accessibility reads never let the host app consume Tab.
+4. **Route** — done, end to end with live Jev, local ghost text and local executor.
+5. **Context** — ring buffer, deny list, secure-field exclusion and Tab-safety list are implemented; recent-window capture is off by default and not yet exercised with a skill.
+6. **Host tools** — `calendar.create` through EventKit, done.
+
+## Per-app notes (measured)
+
+- Chromium/Electron (Brave, Claude app, VS Code): need `AXManualAccessibility`/`AXEnhancedUserInterface` set on the app element, else the focused element is the whole web area. They return a zero-height caret rect on the screen edge, which is treated as "no caret". Text replacement through Accessibility silently fails; the host selects through Accessibility and then types.
+- Terminal: caret bounds work; the field is the whole window, so the buffer is the current line with the shell prompt stripped. Accept key is Ctrl-Space.
+- WebKit editors (Mail compose, Notes, Safari): the web area's value is empty; text before the caret is read with `AXStringForRange`.
+- macOS 14+ refuses programmatic activation of an app the user did not launch, so preview and status windows are non-activating key panels.
 
 Location: `apps/mac/` as a Swift Package (`swift build`), with an Xcode project generated only if needed. Minimum macOS 14.
