@@ -1,22 +1,109 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SkillRouter — a thought, then an action</title><link rel="stylesheet" href="/style.css"></head>
-<body>
-<header><a class="brand" href="/" aria-label="SkillRouter home"><span class="mark">↗</span> SkillRouter <span class="version">EARLY ACCESS</span></a><div class="header-right"><span id="connection" class="connection">Connecting…</span><button id="library-button" class="quiet">Skill library <span>↗</span></button></div></header>
-<main>
-<div class="eyebrow"><span class="dot"></span> A LITTLE LESS BETWEEN THOUGHT AND ACTION</div>
-<h1>Keep your train<br>of thought.</h1><p class="lede">Start typing. Find the words, then the right action.<br>A small assist, right when you need it.</p>
-<section class="workspace" aria-label="Typing workspace">
-<div class="workspace-bar"><span><span class="small-mark">↗</span> Your space to think</span><span id="mode">READY WHEN YOU ARE</span></div>
-<div class="editor-wrap"><div id="mirror" aria-hidden="true"><span id="mirror-text"></span><span id="ghost"></span></div><textarea id="editor" spellcheck="false" aria-label="Write an intent" placeholder="What would you like to get done?" autofocus></textarea></div>
-<div id="chips" class="chips" aria-label="Suggested actions" aria-live="polite"></div>
-<div class="workspace-footer"><span><kbd id="accept-key">Tab</kbd> accept <kbd>Ctrl →</kbd> next word <kbd>Esc</kbd> dismiss</span><span class="local-indicator"><span class="dot"></span> You’re in control</span></div>
-</section>
-<div id="notice" role="status"></div>
-<div class="try-row"><span>TRY A THOUGHT</span><button data-example="translate into Spanish: hello">Translate a phrase <span>↗</span></button><button data-example="draft an email thanking the team for their help">Draft an email <span>↗</span></button><button data-example="schedule a meeting with the design team tomorrow">Plan a meeting <span>↗</span></button></div>
-<section id="result" class="result" hidden aria-live="polite"></section>
-<section class="context-section"><div><h2>A little context goes a long way.</h2><p>Choose what your skills can see. Only declared context is forwarded.</p></div><button id="context-toggle" class="quiet">Context settings <span>+</span></button></section>
-<section id="context-panel" hidden class="settings"><label><input id="screen-context" type="checkbox"> Include screen context</label><label><input id="paused" type="checkbox"> Pause context capture</label><label><input id="tab-safe" type="checkbox" checked> Use Tab to accept (otherwise Ctrl Space)</label><label>Active app<input id="active-app" value="SkillRouter"></label><label>Never include these apps (comma-separated)<input id="deny-apps" placeholder="Password manager, Banking"></label><label>Focused window reference<textarea id="window-context" placeholder="Paste a thread or document as reference data…"></textarea></label><label>Selected text<textarea id="selection-context" placeholder="Optional text selected in the host"></textarea></label><p>Screen context is off by default. Enabling it permits trimmed, redacted text to be sent to configured model services. Screenpipe must be separately enabled in .env; its continuous local recording is managed by Screenpipe.</p></section>
-<footer><span>WORDS FIRST. POSSIBILITIES NEXT.</span><span>Built around your intent <span class="orange">✳</span></span></footer>
-</main>
-<dialog id="library"><div class="dialog-header"><div><div class="eyebrow">YOUR TOOLKIT</div><h2>Small skills. Useful things.</h2></div><button id="close-library" aria-label="Close skill library">×</button></div><div id="skill-list"></div><p class="muted">Skills live in the project’s skills folder as portable SKILL.md files.</p></dialog>
-<script type="module" src="/app.js"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SkillRouter — a thought, then an action</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" aria-label="SkillRouter home"
+        ><span class="mark">↗</span> SkillRouter <span class="version">EARLY ACCESS</span></a
+      >
+      <div class="header-right">
+        <span id="connection" class="connection">Connecting…</span
+        ><button id="library-button" class="quiet">Skill library <span>↗</span></button>
+      </div>
+    </header>
+    <main>
+      <div class="eyebrow"><span class="dot"></span> A LITTLE LESS BETWEEN THOUGHT AND ACTION</div>
+      <h1>Keep your train<br />of thought.</h1>
+      <p class="lede">
+        Start typing. Find the words, then the right action.<br />A small assist, right when you need it.
+      </p>
+      <section class="workspace" aria-label="Typing workspace">
+        <div class="workspace-bar">
+          <span><span class="small-mark">↗</span> Your space to think</span
+          ><span id="mode">READY WHEN YOU ARE</span>
+        </div>
+        <div class="editor-wrap">
+          <div id="mirror" aria-hidden="true"><span id="mirror-text"></span><span id="ghost"></span></div>
+          <textarea
+            id="editor"
+            spellcheck="false"
+            aria-label="Write an intent"
+            placeholder="What would you like to get done?"
+            autofocus
+          ></textarea>
+        </div>
+        <div id="chips" class="chips" aria-label="Suggested actions" aria-live="polite"></div>
+        <div class="workspace-footer">
+          <span><kbd id="accept-key">Tab</kbd> accept <kbd>Ctrl →</kbd> next word <kbd>Esc</kbd> dismiss</span
+          ><span class="local-indicator"><span class="dot"></span> You’re in control</span>
+        </div>
+      </section>
+      <div id="notice" role="status"></div>
+      <div class="try-row">
+        <span>TRY A THOUGHT</span
+        ><button data-example="translate into Spanish: hello">Translate a phrase <span>↗</span></button
+        ><button data-example="draft an email thanking the team for their help">
+          Draft an email <span>↗</span></button
+        ><button data-example="schedule a meeting with the design team tomorrow">
+          Plan a meeting <span>↗</span>
+        </button>
+      </div>
+      <section id="result" class="result" hidden aria-live="polite"></section>
+      <section class="context-section">
+        <div>
+          <h2>A little context goes a long way.</h2>
+          <p>Choose what your skills can see. Only declared context is forwarded.</p>
+        </div>
+        <button id="context-toggle" class="quiet">Context settings <span>+</span></button>
+      </section>
+      <section id="context-panel" hidden class="settings">
+        <label><input id="screen-context" type="checkbox" /> Include screen context</label
+        ><label><input id="paused" type="checkbox" /> Pause context capture</label
+        ><label
+          ><input id="tab-safe" type="checkbox" checked /> Use Tab to accept (otherwise Ctrl Space)</label
+        ><label>Active app<input id="active-app" value="SkillRouter" /></label
+        ><label
+          >Never include these apps (comma-separated)<input
+            id="deny-apps"
+            placeholder="Password manager, Banking" /></label
+        ><label
+          >Focused window reference<textarea
+            id="window-context"
+            placeholder="Paste a thread or document as reference data…"
+          ></textarea></label
+        ><label
+          >Selected text<textarea
+            id="selection-context"
+            placeholder="Optional text selected in the host"
+          ></textarea>
+        </label>
+        <p>
+          Screen context is off by default. Enabling it permits trimmed, redacted text to be sent to
+          configured model services. Screenpipe must be separately enabled in .env; its continuous local
+          recording is managed by Screenpipe.
+        </p>
+      </section>
+      <footer>
+        <span>WORDS FIRST. POSSIBILITIES NEXT.</span
+        ><span>Built around your intent <span class="orange">✳</span></span>
+      </footer>
+    </main>
+    <dialog id="library">
+      <div class="dialog-header">
+        <div>
+          <div class="eyebrow">YOUR TOOLKIT</div>
+          <h2>Small skills. Useful things.</h2>
+        </div>
+        <button id="close-library" aria-label="Close skill library">×</button>
+      </div>
+      <div id="skill-list"></div>
+      <p class="muted">Skills live in the project’s skills folder as portable SKILL.md files.</p>
+    </dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
