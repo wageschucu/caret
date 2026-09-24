@@ -31,6 +31,7 @@ final class Controller {
   private var previousApp: NSRunningApplication?
   private var slotAnswers: [String: String] = [:]
   private var busy = false
+  private var lastWarning: String?
 
   // MARK: - Lifecycle
 
@@ -75,6 +76,7 @@ final class Controller {
       var line = boot.mode == "demo" ? "Helper: demo routing" : "Helper: Jev live"
       if boot.executor == "demo" { line += ", demo executor" }
       if let problems = boot.problems, !problems.isEmpty { line += " · \(problems.count) skill(s) skipped" }
+      if let warning = boot.warning { line = "Demo routing · " + warning }
       onStatus(line + (tap.isRunning ? "" : " · waiting for Accessibility"))
     } catch {
       connected = false
@@ -241,6 +243,10 @@ final class Controller {
         chosen = 0
         eventID = result.event_id
         render()
+        if let warning = result.warning, warning != lastWarning {
+          lastWarning = warning
+          onStatus("Demo routing · " + warning)
+        }
         if !chips.isEmpty {
           client.telemetry("chip_rendered", eventID: eventID, latencyMs: Date().timeIntervalSince(lastTyped) * 1000)
         }

@@ -38,6 +38,8 @@ export async function createApp({
   for (const p of problems) console.warn('Skill skipped: ' + p);
   const executions = new Executions(path.join(dataRoot, 'output'), log),
     sessions = new Map();
+  // Set when TypeSafe rejects the key: routing falls back to demo rules (always labeled as such) until restart.
+  let jevAuthError = null;
   const server = http.createServer(async (req, res) => {
     const send = (status, value) => {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -71,8 +73,9 @@ export async function createApp({
         });
         send(200, {
           token,
-          mode: process.env.TYPESAFE_API_KEY ? 'live' : 'demo',
+          mode: process.env.TYPESAFE_API_KEY && !jevAuthError ? 'live' : 'demo',
           executor: process.env.LLM_MODEL ? 'live' : 'demo',
+          warning: jevAuthError,
           problems,
           skills: skills.map(({ slug, label, description, side_effect_class, context, active }) => ({
             slug,
@@ -127,7 +130,15 @@ export async function createApp({
         const revision = ++session.revision,
           state = trimState(body.state || {}),
           start = performance.now();
-        const output = await route(state, active, { signal: controller.signal });
+        let output;
+        try {
+          output = await route(state, active, { signal: controller.signal, live: !jevAuthError });
+        } catch (e) {
+          if (e.code !== 'jev_auth') throw e;
+          jevAuthError = e.message;
+          console.warn(e.message + ' Routing uses demo rules until then.');
+          output = await route(state, active, { live: false });
+        }
         if (revision !== session.revision || controller.signal.aborted) {
           send(409, { error: 'Superseded route' });
           return;
@@ -163,6 +174,7 @@ export async function createApp({
           event_id: event.id,
           shown,
           mode: output.model === 'demo-rules-not-jev' ? 'demo' : 'live',
+          warning: jevAuthError,
         });
         return;
       }

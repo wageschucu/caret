@@ -14,12 +14,14 @@ final class HelperClient {
     let mode: String
     let executor: String
     let problems: [String]?
+    let warning: String?
     let skills: [Skill]
   }
   struct RouteResult: Decodable {
     let event_id: String
     let shown: [String]
     let mode: String
+    let warning: String?
   }
   struct Completion: Decodable {
     let text: String?

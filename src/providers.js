@@ -38,8 +38,8 @@ export function parseJev(response, skills) {
     throw Error('Jev returned an invalid probability distribution');
   return { ready, distribution, model: response.model, usage: response.usage };
 }
-export async function route(state, skills, { signal, fetcher = fetch } = {}) {
-  if (!process.env.TYPESAFE_API_KEY) return demoRoute(state, skills);
+export async function route(state, skills, { signal, fetcher = fetch, live = true } = {}) {
+  if (!process.env.TYPESAFE_API_KEY || !live) return demoRoute(state, skills);
   const payload = jevRequest(state, skills, process.env.JEV_MODEL || 'jev-1.13.0');
   const response = await fetcher('https://api.typesafe.ai/v1/systemone', {
     method: 'POST',
@@ -47,6 +47,11 @@ export async function route(state, skills, { signal, fetcher = fetch } = {}) {
     body: JSON.stringify(payload),
     signal: AbortSignal.any([signal || new AbortController().signal, AbortSignal.timeout(5000)]),
   });
+  if (response.status === 401 || response.status === 403) {
+    const error = Error('TypeSafe rejected the API key. Check TYPESAFE_API_KEY in .env and restart.');
+    error.code = 'jev_auth';
+    throw error;
+  }
   if (!response.ok) throw Error(`Jev request failed (${response.status}). Try again shortly.`);
   return parseJev(await response.json(), skills);
 }
