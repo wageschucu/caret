@@ -170,7 +170,8 @@ final class HelperClient {
       skill: json["skill"] as? String ?? "",
       preview: json["preview"] as? String,
       missingSlots: json["missing_slots"] as? [String] ?? [],
-      calls: json["calls"] as? [[String: Any]] ?? [],
+      // A preview carries `calls`; a host handoff carries the single validated `call`.
+      calls: (json["calls"] as? [[String: Any]]) ?? (json["call"] as? [String: Any]).map { [$0] } ?? [],
       requiresConfirmation: json["requires_confirmation"] as? Bool ?? false,
       demo: json["demo"] as? Bool ?? false,
       result: json["result"] as? String,
