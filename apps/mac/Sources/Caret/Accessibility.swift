@@ -6,6 +6,8 @@ import Carbon
 struct FocusSnapshot {
   let element: AXUIElement
   let pid: pid_t
+  let role: String
+  let subrole: String
   let bundleID: String
   let appName: String
   let windowTitle: String
@@ -50,6 +52,7 @@ final class AccessibilityReader {
   private let systemWide = AXUIElementCreateSystemWide()
   private(set) var recent: [RecentWindow] = []
   private var lastWindowKey = ""
+  private var enhancedApps: Set<pid_t> = []
 
   static func isTrusted(prompt: Bool) -> Bool {
     let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
@@ -131,14 +134,15 @@ final class AccessibilityReader {
     guard Self.textRoles.contains(role) || selection != nil else { return nil }
 
     let appElement = AXUIElementCreateApplication(pid)
+    enableFullTree(appElement, pid: pid)
     let window = Self.attribute(appElement, kAXFocusedWindowAttribute).map { $0 as! AXUIElement }
     let windowTitle = window.flatMap { Self.string($0, kAXTitleAttribute) } ?? ""
     captureWindowIfChanged(window, bundleID: bundleID, title: windowTitle)
 
     if secure {
       return FocusSnapshot(
-        element: element, pid: pid, bundleID: bundleID, appName: appName, windowTitle: windowTitle,
-        text: "", caret: 0, selectionLength: 0, selectedText: "", secure: true, caretRect: nil, frame: nil)
+        element: element, pid: pid, role: role, subrole: subrole, bundleID: bundleID, appName: appName,
+        windowTitle: windowTitle, text: "", caret: 0, selectionLength: 0, selectedText: "", secure: true, caretRect: nil, frame: nil)
     }
 
     var text = Self.string(element, kAXValueAttribute) ?? ""
@@ -154,9 +158,18 @@ final class AccessibilityReader {
       }
     }
     return FocusSnapshot(
-      element: element, pid: pid, bundleID: bundleID, appName: appName, windowTitle: windowTitle,
-      text: text, caret: caret, selectionLength: selectionLength, selectedText: selectedText, secure: false,
+      element: element, pid: pid, role: role, subrole: subrole, bundleID: bundleID, appName: appName,
+      windowTitle: windowTitle, text: text, caret: caret, selectionLength: selectionLength, selectedText: selectedText, secure: false,
       caretRect: caretRect.map(Self.appKitRect), frame: Self.frame(element).map(Self.appKitRect))
+  }
+
+  /// Chromium and Electron apps expose a skeleton accessibility tree until an assistive client asks
+  /// for the full one. Without this the focused element is the whole web area and caret bounds are missing.
+  private func enableFullTree(_ appElement: AXUIElement, pid: pid_t) {
+    guard !enhancedApps.contains(pid) else { return }
+    enhancedApps.insert(pid)
+    AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+    AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
   }
 
   // MARK: - Recent windows

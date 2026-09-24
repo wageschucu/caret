@@ -125,6 +125,7 @@ final class Controller {
     }
     let sameField = snapshot.map { CFEqual($0.element, current.element) } ?? false
     let newBuffer = current.buffer
+    if !sameField { Diagnostics.focus(current) }
     snapshot = current
     if sameField && newBuffer == buffer {
       render()
