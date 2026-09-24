@@ -289,32 +289,52 @@ final class AccessibilityReader {
     guard key != lastWindowKey else { return }
     lastWindowKey = key
     var parts: [String] = []
-    var budget = 3000
-    Self.collectText(window, depth: 0, parts: &parts, budget: &budget)
+    var budget = 6000
+    // Prefer the page's main content when the app marks it (WebKit: <article> / <main> landmarks).
+    let root = Self.findMainContent(window, depth: 0) ?? window
+    Self.collectText(root, depth: 0, parts: &parts, budget: &budget)
     let text = parts.joined(separator: "\n")
+    Diagnostics.log("captured window \(bundleID) “\(title.prefix(60))” \(text.count) chars\(root === window ? "" : " (main content)")")
     guard !text.isEmpty else { return }
     recent.append(RecentWindow(timestamp: Date(), bundleID: bundleID, windowTitle: title, text: text))
     if recent.count > 4 { recent.removeFirst(recent.count - 4) }
   }
 
+  private static let mainSubroles: Set<String> = ["AXDocumentArticle", "AXLandmarkMain"]
+  private static let chromeSubroles: Set<String> = [
+    "AXLandmarkNavigation", "AXLandmarkBanner", "AXLandmarkContentInfo", "AXLandmarkSearch",
+    "AXLandmarkComplementary",
+  ]
+  private static let chromeRoles: Set<String> = [kAXToolbarRole, kAXMenuBarRole, kAXTabGroupRole, "AXToolbar"]
+
+  private static func findMainContent(_ element: AXUIElement, depth: Int) -> AXUIElement? {
+    guard depth < 25 else { return nil }
+    if let subrole = string(element, kAXSubroleAttribute), mainSubroles.contains(subrole) { return element }
+    guard let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] else { return nil }
+    for child in children.prefix(200) {
+      if let found = findMainContent(child, depth: depth + 1) { return found }
+    }
+    return nil
+  }
+
   private static func collectText(_ element: AXUIElement, depth: Int, parts: inout [String], budget: inout Int) {
-    guard depth < 12, budget > 0 else { return }
+    guard depth < 25, budget > 0 else { return }
     let role = string(element, kAXRoleAttribute) ?? ""
-    if role == kAXStaticTextRole || role == kAXTextAreaRole || role == kAXTextFieldRole {
-      if string(element, kAXSubroleAttribute) == kAXSecureTextFieldSubrole { return }
+    let subrole = string(element, kAXSubroleAttribute) ?? ""
+    if chromeRoles.contains(role) || chromeSubroles.contains(subrole) { return }
+    if role == kAXStaticTextRole || role == kAXTextAreaRole || role == kAXTextFieldRole || role == "AXHeading" {
+      if subrole == kAXSecureTextFieldSubrole { return }
       if let value = string(element, kAXValueAttribute)?.trimmingCharacters(in: .whitespacesAndNewlines),
         !value.isEmpty
       {
         let clipped = String(value.prefix(budget))
         parts.append(clipped)
         budget -= clipped.count
-        return
+        if role != "AXHeading" { return }
       }
     }
-    // Toolbars, menus and tab bars are chrome, not content.
-    if [kAXToolbarRole, kAXMenuBarRole, kAXTabGroupRole, "AXToolbar"].contains(role) { return }
     guard let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] else { return }
-    for child in children.prefix(80) {
+    for child in children.prefix(200) {
       collectText(child, depth: depth + 1, parts: &parts, budget: &budget)
       if budget <= 0 { return }
     }

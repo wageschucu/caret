@@ -59,7 +59,7 @@ export function trimState(input = {}, now = Date.now()) {
           return true;
         })
         .join('\n')
-        .slice(0, 3000);
+        .slice(0, 6000);
       if (text)
         state.screens.unshift({
           t: s.t,

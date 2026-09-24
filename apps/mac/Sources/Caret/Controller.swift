@@ -47,6 +47,7 @@ final class Controller {
   private var previousApp: NSRunningApplication?
   private var slotAnswers: [String: String] = [:]
   private var busy = false
+  private var working: String?
   private var lastWarning: String?
 
   // MARK: - Lifecycle
@@ -330,7 +331,7 @@ final class Controller {
     overlay.show(
       ghost: ghost,
       chips: chips.enumerated().map { (label: client.label(for: $0.element), selected: $0.offset == chosen) },
-      acceptKey: acceptKeyName, anchor: anchor)
+      acceptKey: acceptKeyName, anchor: anchor, working: working)
   }
 
   // MARK: - Keys
@@ -380,6 +381,7 @@ final class Controller {
     guard let skill = chips[safe: chosen], let eventID else { return }
     busy = true
     clearSuggestions()
+    working = client.label(for: skill) + "…"
     render()
     previousApp = NSWorkspace.shared.frontmostApplication
     Task {
@@ -392,6 +394,8 @@ final class Controller {
         previewPanel.showError(error.localizedDescription)
       }
       busy = false
+      working = nil
+      render()
       syncKeyState()
     }
   }
@@ -456,6 +460,7 @@ final class Controller {
   private func submitPreview(_ fields: [String: String]) {
     guard let p = preview, !busy else { return }
     busy = true
+    working = client.label(for: p.skill) + "…"
     Task {
       do {
         if !p.missingSlots.isEmpty {
@@ -476,6 +481,8 @@ final class Controller {
         preview = nil
       }
       busy = false
+      working = nil
+      render()
     }
   }
 

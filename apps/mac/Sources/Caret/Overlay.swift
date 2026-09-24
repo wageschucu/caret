@@ -40,9 +40,21 @@ final class OverlayPanel: NSPanel {
   }
 
   /// Renders the overlay anchored to `anchor` (AppKit screen coordinates). Hides when there is nothing to show.
-  func show(ghost: String, chips: [(label: String, selected: Bool)], acceptKey: String, anchor: CGRect) {
-    guard !ghost.isEmpty || !chips.isEmpty else {
+  func show(
+    ghost: String, chips: [(label: String, selected: Bool)], acceptKey: String, anchor: CGRect, working: String? = nil
+  ) {
+    guard !ghost.isEmpty || !chips.isEmpty || working != nil else {
       orderOut(nil)
+      return
+    }
+    if let working {
+      // A busy pill replaces ghost text and chips while the executor runs.
+      ghostLabel.stringValue = "⋯ " + working
+      ghostLabel.isHidden = false
+      ghostLabel.alphaValue = 1
+      chipRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+      chipRow.isHidden = true
+      place(at: anchor)
       return
     }
     ghostLabel.stringValue = ghost
@@ -51,6 +63,10 @@ final class OverlayPanel: NSPanel {
     chipRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for chip in chips { chipRow.addArrangedSubview(ChipView(label: chip.label, key: acceptKey, selected: chip.selected)) }
     chipRow.isHidden = chips.isEmpty
+    place(at: anchor)
+  }
+
+  private func place(at anchor: CGRect) {
     stack.layoutSubtreeIfNeeded()
     let size = stack.fittingSize
     var origin = CGPoint(x: anchor.minX, y: anchor.minY - size.height - 6)
