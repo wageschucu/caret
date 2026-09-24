@@ -4,7 +4,14 @@ import AppKit
 /// Mirrors the state machine in public/app.js so both hosts behave the same.
 @MainActor
 final class Controller {
-  var onStatus: (String) -> Void = { _ in }
+  /// Status line for the menu. `attention` is true only when the user must act (permission, helper down).
+  var onStatus: (String, Bool) -> Void = { _, _ in }
+  private func status(_ text: String, attention: Bool = false) { onStatus(text, attention) }
+
+  /// Cancellations from typing on are normal, not failures.
+  private static func isCancellation(_ error: Error) -> Bool {
+    error is CancellationError || (error as? URLError)?.code == .cancelled
+  }
   private(set) var lastStateJSON = "{}"
 
   private let reader = AccessibilityReader()
@@ -58,11 +65,11 @@ final class Controller {
       if tap.start() {
         status()
       } else {
-        onStatus("Could not install the key tap. Check Accessibility permission and relaunch.")
+        status("Could not install the key tap. Check Accessibility permission and relaunch.", attention: true)
       }
       return
     }
-    onStatus("Waiting for Accessibility permission… (if Caret is already listed, remove and re-add it)")
+    status("Waiting for Accessibility permission… (if Caret is already listed, remove and re-add it)", attention: true)
     Task {
       try? await Task.sleep(for: .seconds(2))
       waitForTrust()
@@ -77,17 +84,17 @@ final class Controller {
       if boot.executor == "demo" { line += ", demo executor" }
       if let problems = boot.problems, !problems.isEmpty { line += " · \(problems.count) skill(s) skipped" }
       if let warning = boot.warning { line = "Demo routing · " + warning }
-      onStatus(line + (tap.isRunning ? "" : " · waiting for Accessibility"))
+      status(line + (tap.isRunning ? "" : " · waiting for Accessibility"), attention: !tap.isRunning)
     } catch {
       connected = false
-      onStatus("Helper not running at \(Settings.helperURL.absoluteString) — retrying")
+      status("Helper not running at \(Settings.helperURL.absoluteString) — retrying", attention: true)
       try? await Task.sleep(for: .seconds(3))
       await connect()
     }
   }
 
   private func status() {
-    if connected { Task { await connect() } } else { onStatus("Accessibility granted · waiting for helper") }
+    if connected { Task { await connect() } } else { status("Accessibility granted · waiting for helper", attention: true) }
   }
 
   func pausedChanged() {
@@ -226,7 +233,7 @@ final class Controller {
           }
         }
       } catch {
-        if v == revision, !(error is CancellationError) { onStatus("Completer: \(error.localizedDescription)") }
+        if v == revision, !Self.isCancellation(error) { status("Completer: \(error.localizedDescription)") }
       }
     }
   }
@@ -245,17 +252,17 @@ final class Controller {
         render()
         if let warning = result.warning, warning != lastWarning {
           lastWarning = warning
-          onStatus("Demo routing · " + warning)
+          status("Demo routing · " + warning)
         }
         if !chips.isEmpty {
           client.telemetry("chip_rendered", eventID: eventID, latencyMs: Date().timeIntervalSince(lastTyped) * 1000)
         }
       } catch {
-        guard v == revision, !(error is CancellationError) else { return }
+        guard v == revision, !Self.isCancellation(error) else { return }
         chips = []
         render()
         Diagnostics.log("route failed: \(error.localizedDescription)")
-        onStatus("Router: \(error.localizedDescription)")
+        status("Router: \(error.localizedDescription)")
       }
     }
   }

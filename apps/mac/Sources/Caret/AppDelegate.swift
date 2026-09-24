@@ -42,11 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     statusWindow.onOpenSettings = { [weak self] in self?.openAccessibility() }
     statusWindow.onQuit = { NSApp.terminate(nil) }
-    controller.onStatus = { [weak self] text in
+    controller.onStatus = { [weak self] text, attention in
       self?.statusLine.title = text
-      // Anything other than a connected, trusted state deserves a visible window.
-      let ok = text.hasPrefix("Helper:") && !text.contains("waiting")
-      self?.statusWindow.update(status: text, needsAttention: !ok)
+      self?.statusWindow.update(status: text, needsAttention: attention)
     }
     controller.start()
   }
