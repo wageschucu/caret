@@ -101,6 +101,16 @@ final class AccessibilityReader {
     return rect.height < 1 ? nil : rect
   }
 
+  /// Text of a range, for WebKit web areas whose value attribute is empty (Mail, Notes, Safari).
+  static func stringForRange(_ element: AXUIElement, location: Int, length: Int) -> String? {
+    var range = CFRange(location: location, length: length)
+    guard length > 0, let param = AXValueCreate(.cfRange, &range) else { return nil }
+    var value: CFTypeRef?
+    let error = AXUIElementCopyParameterizedAttributeValue(
+      element, kAXStringForRangeParameterizedAttribute as CFString, param, &value)
+    return error == .success ? value as? String : nil
+  }
+
   /// Quartz (top-left origin) → AppKit (bottom-left origin) screen coordinates.
   static func appKitRect(_ quartz: CGRect) -> CGRect {
     let height = NSScreen.screens.first?.frame.height ?? 0
@@ -163,8 +173,19 @@ final class AccessibilityReader {
     }
 
     var text = Self.string(element, kAXValueAttribute) ?? ""
-    if text.utf16.count > 20000 { text = String(text.suffix(20000)) }
-    let caret = selection?.location ?? text.utf16.count
+    var caret = selection?.location ?? text.utf16.count
+    if text.isEmpty, let selection, selection.location > 0 {
+      // WebKit editors report an empty value on the web area; the text is only reachable by range.
+      let length = min(selection.location, 20000)
+      if let before = Self.stringForRange(element, location: selection.location - length, length: length) {
+        text = before
+        caret = before.utf16.count
+      }
+    } else if text.utf16.count > 20000 {
+      let drop = text.utf16.count - 20000
+      text = String(text.suffix(20000))
+      caret = max(0, caret - drop)
+    }
     let selectionLength = selection?.length ?? 0
     let selectedText = selectionLength > 0 ? (Self.string(element, kAXSelectedTextAttribute) ?? "") : ""
 
