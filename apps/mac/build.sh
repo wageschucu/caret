@@ -3,6 +3,7 @@
 # Usage: apps/mac/build.sh [--run]
 set -eu
 cd "$(dirname "$0")"
+REPO="$(cd ../.. && pwd)"
 swift build -c release 2>&1 | grep -v '^\[' || true
 BIN=".build/release/Caret"
 test -x "$BIN" || { echo "build failed"; exit 1; }
@@ -25,6 +26,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>MIT</string>
+  <key>CFBundleIconFile</key><string>Caret</string>
+  <key>CaretHelperRepo</key><string>__REPO__</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Caret adds events you confirm to your calendar, and removes them when you press Undo.</string>
 </dict>
 </plist>
@@ -38,6 +41,8 @@ EOF
 if [ -z "${CARET_SIGN_IDENTITY:-}" ] && security find-identity -p codesigning 2>/dev/null | grep -q '"Caret Dev"'; then
   CARET_SIGN_IDENTITY="Caret Dev"
 fi
+sed -i '' "s|__REPO__|$REPO|" "$APP/Contents/Info.plist"
+[ -f Resources/Caret.icns ] && cp Resources/Caret.icns "$APP/Contents/Resources/Caret.icns"
 codesign --force --sign "${CARET_SIGN_IDENTITY:--}" --identifier com.paulgettel.caret "$APP" >/dev/null
 [ -n "${CARET_SIGN_IDENTITY:-}" ] && echo "signed with $CARET_SIGN_IDENTITY" || echo "ad-hoc signed (Accessibility must be re-granted after each rebuild; see README)"
 echo "built $APP"

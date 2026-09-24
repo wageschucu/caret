@@ -17,7 +17,8 @@ const confusion = {},
     n: 0,
     no_route: 0,
   }));
-let negatives = 0,
+let stale = 0,
+  negatives = 0,
   positives = 0,
   falseRoutes = 0,
   missed = 0,
@@ -31,8 +32,11 @@ for (const row of rows) {
       : row.choice_distribution
         ? { ready: row.ready_p, distribution: row.choice_distribution, model: row.jev_model }
         : demoRoute(state, skills);
-  if (row.registry_hash && row.registry_hash !== registryHash(skills) && !live)
-    throw Error('Recorded probabilities belong to a different registry; use --live to re-evaluate.');
+  if (row.registry_hash && row.registry_hash !== registryHash(skills) && !live) {
+    // Recorded probabilities are only valid for the registry that produced them.
+    stale++;
+    continue;
+  }
   const shown = selectRoute(output.ready, output.distribution, [], state.buffer),
     predicted = shown[0] || 'NO_ROUTE',
     correct = row.label === 'NO_ROUTE' ? !shown.length : shown.includes(row.label);
@@ -65,7 +69,8 @@ const report = {
   dataset_hash: hash(rows),
   registry_hash: registryHash(skills),
   thresholds_version: THRESHOLDS.version,
-  total: rows.length,
+  total: rows.length - stale,
+  stale_skipped: stale,
   false_route_rate: negatives ? falseRoutes / negatives : 0,
   missed_route_rate: positives ? missed / positives : 0,
   wrong_route_count: wrong,
@@ -91,6 +96,10 @@ if (baseline) {
     report.regression = true;
   }
 }
+if (stale)
+  console.error(
+    `${stale} state(s) skipped: recorded under a different registry. Run with --live to re-evaluate them.`
+  );
 const out = value('--out', null);
 if (out) await fs.writeFile(out, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));

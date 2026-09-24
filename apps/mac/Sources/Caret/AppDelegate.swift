@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var statusLine: NSMenuItem!
   private var pauseItem: NSMenuItem!
   private var contextItem: NSMenuItem!
+  private var loginItem: NSMenuItem!
   private let statusWindow = StatusWindow()
 
   private var menu: NSMenu!
@@ -31,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     contextItem = NSMenuItem(title: "Include recent windows as context", action: #selector(toggleContext), keyEquivalent: "")
     contextItem.target = self
     menu.addItem(contextItem)
+    loginItem = NSMenuItem(title: "Launch Caret at login", action: #selector(toggleLogin), keyEquivalent: "")
+    loginItem.target = self
+    menu.addItem(loginItem)
+    menu.addItem(.separator())
     menu.addItem(withTitle: "Copy last state (debug)", action: #selector(copyState), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Diagnose focused field in 5 s (debug)", action: #selector(diagnose), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Open helper page", action: #selector(openHelper), keyEquivalent: "").target = self
@@ -85,6 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     controller.pausedChanged()
   }
   @objc private func toggleContext() { Settings.screenContext.toggle() }
+  @objc private func toggleLogin() {
+    do {
+      try HelperLauncher.setLaunchAtLogin(!HelperLauncher.launchesAtLogin)
+    } catch {
+      statusWindow.update(status: "Could not change login item: \(error.localizedDescription)", needsAttention: true)
+    }
+  }
+
+  func applicationWillTerminate(_ notification: Notification) { controller.launcher.stop() }
   @objc private func copyState() {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(controller.lastStateJSON, forType: .string)
@@ -103,5 +117,6 @@ extension AppDelegate: NSMenuDelegate {
   func menuWillOpen(_ menu: NSMenu) {
     pauseItem.state = Settings.paused ? .on : .off
     contextItem.state = Settings.screenContext ? .on : .off
+    loginItem.state = HelperLauncher.launchesAtLogin ? .on : .off
   }
 }

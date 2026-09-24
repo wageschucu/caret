@@ -20,6 +20,7 @@ final class Controller {
   private let previewPanel = PreviewPanel()
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
+  let launcher = HelperLauncher()
   /// Host-side undo for the last calendar event created through EventKit.
   private var calendarUndo: (helperID: String, eventID: String)?
 
@@ -90,8 +91,14 @@ final class Controller {
       status(line + (tap.isRunning ? "" : " · waiting for Accessibility"), attention: !tap.isRunning)
     } catch {
       connected = false
-      status("Helper not running at \(Settings.helperURL.absoluteString) — retrying", attention: true)
-      try? await Task.sleep(for: .seconds(3))
+      if launcher.start() {
+        status("Starting the helper…")
+      } else if !launcher.attempted {
+        status("Helper not running at \(Settings.helperURL.absoluteString) — start it with npm start", attention: true)
+      } else if !launcher.isRunning {
+        status("Helper could not be started; see ~/Library/Logs/Caret/helper.log", attention: true)
+      }
+      try? await Task.sleep(for: .seconds(launcher.isRunning ? 1 : 3))
       await connect()
     }
   }

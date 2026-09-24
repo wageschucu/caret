@@ -28,6 +28,11 @@ enum Settings {
     set { defaults.set(newValue, forKey: "tabUnsafeApps") }
   }
 
+  /// Repository root that holds the helper, embedded by build.sh; overridable in defaults.
+  static var helperRepo: String? {
+    defaults.string(forKey: "helperRepo") ?? Bundle.main.object(forInfoDictionaryKey: "CaretHelperRepo") as? String
+  }
+
   static var paused: Bool {
     get { defaults.bool(forKey: "paused") }
     set { defaults.set(newValue, forKey: "paused") }

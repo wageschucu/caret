@@ -7,9 +7,11 @@ The native host that makes Caret work in any application, at the caret. Spec: [d
 Requires macOS 14+ and the Xcode Command Line Tools (Swift 5.9+). Xcode itself is not needed.
 
 ```sh
-npm start                 # the helper, from the repository root
+npm install               # once, from the repository root
 apps/mac/build.sh --run   # builds build/Caret.app and launches it
 ```
+
+The app starts the helper itself (`node src/server.js` from the repository path embedded at build time, log in `~/Library/Logs/Caret/helper.log`) when nothing answers on the helper port, and stops it on quit. A helper you started by hand with `npm start` is used as is. "Launch Caret at login" in the menu registers the app as a login item.
 
 On first launch macOS asks for **Accessibility** permission (System Settings → Privacy & Security → Accessibility). Caret is inert until it is granted. The app shows a Dock icon (its menu mirrors the menu-bar one, since a notch can hide menu-bar icons) and a status window whenever it needs attention; clicking the Dock icon opens that window.
 
