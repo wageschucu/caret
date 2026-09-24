@@ -95,6 +95,7 @@ export async function chat(messages, { model, signal, json = false, maxTokens = 
       model,
       messages,
       max_tokens: maxTokens,
+      temperature: 0,
       ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
     signal: AbortSignal.any([signal || new AbortController().signal, AbortSignal.timeout(30000)]),

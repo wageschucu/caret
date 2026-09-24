@@ -42,6 +42,12 @@ The standalone host is an implementation choice for the PDF’s open host questi
 
 16 automated tests pass, including HTTP integration with duplicate confirmation and undo. Browser checks verified one-Tab translation, missing-slot calendar preview, a separate final confirmation card, and Esc cancellation. Live TypeSafe and external generation were not exercised because no services/credentials were configured. Measured production latency, multilingual accuracy, and the below-20% missed-route success criterion remain unverified.
 
+## Live-model measurements — 2026-09-24 (M2, 16 GB)
+
+- Routing: Jev live at `jevtypesafeai.com/api/v1/decide`; 22/22 seed states correct (`eval/live-report.json`), ~$0.0002 per call.
+- Completer: `llama3.2:1b` through Ollama's raw `/api/generate`. Warm first token 46–240 ms (inside the spec's 200 ms most of the time); the initial load from disk takes ~20 s and the helper keeps the model resident for 30 min after each use. `COMPLETER_BUDGET_MS=800` on this machine so a cold-ish call still yields text. The chat-completions format was unusable for a 1B model (it echoed the JSON envelope).
+- Executor: `llama3.1:8b` on the GPU, 2–9 s per plan at temperature 0. The Homebrew build of Ollama ran on the CPU only (66 s per plan); the official app uses Metal. Prompt restructured to present the typed text plainly with worked examples; skill bodies now say where each detail appears in the sentence. With that, all eight seed skills produce valid plans on the test sentences.
+
 ## Remaining milestones
 
 M2: opt-in unknown-intent proposal, authoring interface, debug view, registry versioning/rollback, replay-derived per-user thresholds.
