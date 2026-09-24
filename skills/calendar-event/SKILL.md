@@ -4,6 +4,7 @@ description: "Create a calendar event. Not reminders, not email drafts."
 license: MIT
 allowed-tools: calendar.create
 metadata:
+  label: "Create event"
   source: "seed"
   version: "0.1.0"
   examples: "schedule a design review tomorrow"

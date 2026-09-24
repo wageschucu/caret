@@ -1,6 +1,10 @@
-# SkillRouter
+# Caret (SkillRouter)
 
-A local, keyboard-first implementation of the **M1 core loop** from [SKILLROUTER_v3.md](SKILLROUTER_v3.md). The original PDF is preserved. The Markdown conversion includes all 24 numbered sections, reconstructed tables, code samples, and an architecture diagram.
+A local, keyboard-first implementation of the **M1 core loop** from [SKILLROUTER_v3.md](SKILLROUTER_v3.md): ghost text while you type, a calibrated action chip when intent is clear, Tab to accept, and a strict permission gate before anything runs. The original PDF is preserved. The Markdown conversion includes all 24 numbered sections, reconstructed tables, code samples, and an architecture diagram.
+
+The concept — inline completion plus a nearby action, both accepted from the keyboard, with a typed judge deciding when to offer an action — is derived from [theodorexli/Caret](https://github.com/theodorexli/Caret) (MIT). This is a clean-room reimplementation in Node with a different architecture; no code is shared. See [docs/implementation.md](docs/implementation.md) for decisions and [docs/host.md](docs/host.md) for the native macOS host that makes it work in any application.
+
+**Current state:** the core (routing, thresholds, permission gate, executor, logs, eval) is complete and tested. The only host today is a browser typing field. The system-wide macOS host is the next milestone.
 
 ## Run
 
@@ -35,6 +39,8 @@ LLM_MODEL=your-installed-model
 COMPLETER_MODEL=your-fast-installed-model
 ```
 
+`.env` is gitignored.
+
 `LLM_BASE_URL` must provide an OpenAI-compatible `/chat/completions` endpoint with streaming and JSON-object output support. For a hosted endpoint, also set `LLM_API_KEY`. These variables are read only by the helper; credentials never enter the browser. Restart after changing `.env` or skills. No models are downloaded or configured automatically.
 
 The completer streams a phrase, stops at punctuation or 30 tokens, and cancels at a 200 ms deadline. A cold or slow model may return no ghost text within that budget. Use a warm, fast model. No latency or live accuracy claim has been validated yet.
@@ -56,7 +62,7 @@ If the OS reserves Ctrl+Right (for example for switching desktops), Alt+Right al
 
 ## Privacy and permissions
 
-Screen context is off by default. The context settings support pasted focused-window text, selected text, an app deny list, and pause. Optional Screenpipe integration requires both `SCREENPIPE_ENABLED=true` and the UI’s screen-context checkbox. It requests recent accessibility text with OCR fallback. It never fetches screenshots or audio. Screenpipe’s own continuous recording and secure-field exclusions must be configured in Screenpipe; this browser host does not control OS capture.
+Screen context is supplied by the host, never fetched by the helper. The browser host has no access to other windows; its context settings support pasted focused-window text, selected text, an app deny list, and pause. The native macOS host reads the focused field, selection, and recent windows through the Accessibility API (see [docs/host.md](docs/host.md)). Screenpipe was removed on 2026-09-24: it is unnecessary once the host has Accessibility access, and its continuous recording is costly.
 
 The helper trims/deduplicates context, removes common secret patterns, and caps serialized state at 4,000 UTF-8 bytes as a conservative token bound. A secure or denied host field returns empty state. Only a skill’s declared context reaches the executor. Screen text is labeled untrusted reference data.
 
@@ -66,8 +72,8 @@ Local files are created exclusively without overwriting existing files. Undo onl
 
 ## Skills and data
 
-- `skills/<slug>/SKILL.md`: eight bundled skills. Override `metadata.active` with the string `"false"` to disable a skill, then restart.
-- `.skillrouter/events.jsonl`: local redacted routing states, interaction events, and execution events.
+- `skills/<slug>/SKILL.md`: eight bundled skills. Override `metadata.active` with the string `"false"` to disable a skill, then restart. `metadata.label` is the name shown on the chip. A skill that fails validation is skipped and reported at startup and in the UI; it does not stop the helper.
+- `.skillrouter/events.jsonl`: local redacted routing states, interaction events, and execution events. Rotated at 5 MB.
 - `.skillrouter/registries/`: full registry snapshots keyed by hash for historical reconstruction.
 - `.skillrouter/output/files/`: new local text files.
 - `.skillrouter/output/calendar/`: local event JSON records.
@@ -97,4 +103,11 @@ Add hand-checked JSONL entries with `state`, `label` (a skill slug or `NO_ROUTE`
 
 ## Implementation boundary
 
-This is an M1 implementation and a usable local prototype. It does **not** implement the PDF’s M2/M3 proposal authoring, catalog adoption, script sandbox, rollback UI, multi-device sync, voice input, or an OS/browser-extension host. Active registries over 254 skills fail explicitly rather than silently dropping options. See [implementation notes](docs/implementation.md) for API corrections and remaining validation.
+This is an M1 implementation and a usable local prototype. It does **not** implement the PDF’s M2/M3 proposal authoring, catalog adoption, script sandbox, rollback UI, multi-device sync, or voice input. Active registries over 254 skills fail explicitly rather than silently dropping options. See [implementation notes](docs/implementation.md) for API corrections and remaining validation.
+
+## Roadmap
+
+1. **Native macOS host** ([docs/host.md](docs/host.md)): Accessibility API for context, a global event tap for Tab/Esc, a floating panel at the caret. The Node helper is unchanged; the host replaces `public/`.
+2. **Live-model validation**: measure the 200 ms ghost-text budget and routing accuracy with real models; grow the labeled eval set from recorded routing events.
+3. **M2**: unknown-intent proposal, debug view, registry versioning and rollback.
+4. Other hosts share the helper: Windows (UI Automation), Linux (AT-SPI), phone (keyboard extension / share target).

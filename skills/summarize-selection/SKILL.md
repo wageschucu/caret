@@ -4,6 +4,7 @@ description: "Summarize selected text or a document. Not extract tasks, not rewr
 license: MIT
 allowed-tools: text.result
 metadata:
+  label: "Summarize"
   source: "seed"
   version: "0.1.0"
   examples: "summarize the selected passage"

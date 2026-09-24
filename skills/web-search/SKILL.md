@@ -4,6 +4,7 @@ description: "Look something up on the web. Not book, send, or schedule."
 license: MIT
 allowed-tools: text.result
 metadata:
+  label: "Web search"
   source: "seed"
   version: "0.1.0"
   examples: "search for quiet mechanical keyboards"

@@ -8,17 +8,24 @@ import { trimState, RouteSession, THRESHOLDS, hash, redact } from './core.js';
 import { route, streamCompletion } from './providers.js';
 import { prepare, Executions } from './executor.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SESSION_TTL = 86400000;
 export async function createApp({
   dataRoot = path.join(ROOT, '.skillrouter'),
   skillsRoot = path.join(ROOT, 'skills'),
 } = {}) {
   await fs.mkdir(dataRoot, { recursive: true, mode: 0o700 });
-  const skills = await loadRegistry(skillsRoot),
+  const problems = [];
+  const skills = await loadRegistry(skillsRoot, { onProblem: (m) => problems.push(m) }),
     active = skills.filter((s) => s.active),
     registry_hash = registryHash(skills);
+  const eventsFile = path.join(dataRoot, 'events.jsonl');
   const log = async (event) => {
     const row = { id: randomUUID(), ts: new Date().toISOString(), ...event };
-    await fs.appendFile(path.join(dataRoot, 'events.jsonl'), JSON.stringify(row) + '\n', { mode: 0o600 });
+    // Rotate once the log passes 5 MB; routing states are logged on every pause in typing.
+    const size = (await fs.stat(eventsFile).catch(() => ({ size: 0 }))).size;
+    if (size > 5 * 1024 * 1024)
+      await fs.rename(eventsFile, eventsFile.replace(/\.jsonl$/, `.${row.ts.replace(/[:.]/g, '-')}.jsonl`));
+    await fs.appendFile(eventsFile, JSON.stringify(row) + '\n', { mode: 0o600 });
     return row;
   };
   // Snapshot the exact registry once so historical routes are reconstructible after edits.
@@ -28,46 +35,9 @@ export async function createApp({
     JSON.stringify(skills, null, 2),
     { mode: 0o600 }
   );
+  for (const p of problems) console.warn('Skill skipped: ' + p);
   const executions = new Executions(path.join(dataRoot, 'output'), log),
     sessions = new Map();
-  async function screens(state) {
-    if (process.env.SCREENPIPE_ENABLED !== 'true' || state.screen_context === false || state.paused)
-      return state;
-    const url = new URL('/search', process.env.SCREENPIPE_URL || 'http://127.0.0.1:3030');
-    url.searchParams.set('content_type', 'accessibility');
-    url.searchParams.set('limit', '20');
-    url.searchParams.set('start_time', new Date(Date.now() - 300000).toISOString());
-    url.searchParams.set('end_time', new Date().toISOString());
-    url.searchParams.set('max_content_length', '2000');
-    url.searchParams.set(
-      'fields',
-      'content.timestamp,content.app_name,content.window_name,content.text,content.is_secure'
-    );
-    const options = {
-      signal: AbortSignal.timeout(1200),
-      headers: process.env.SCREENPIPE_API_KEY
-        ? { Authorization: `Bearer ${process.env.SCREENPIPE_API_KEY}` }
-        : {},
-    };
-    let r = await fetch(url, options);
-    if (!r.ok) throw Error('Screenpipe unavailable; disable screen context or start Screenpipe.');
-    let data = await r.json();
-    if (!data.data?.length) {
-      url.searchParams.set('content_type', 'ocr');
-      r = await fetch(url, { ...options, signal: AbortSignal.timeout(1200) });
-      if (!r.ok) throw Error('Screenpipe OCR lookup failed');
-      data = await r.json();
-    }
-    state.screens = (data.data || []).map((x) => ({
-      t: x.content?.timestamp,
-      app: x.content?.app_name,
-      window_title: x.content?.window_name,
-      text: x.content?.text,
-      secure: !!x.content?.is_secure,
-    }));
-    // OCR history is never assumed to be the active window. Only a host-supplied window is forwarded.
-    return state;
-  }
   const server = http.createServer(async (req, res) => {
     const send = (status, value) => {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -92,6 +62,7 @@ export async function createApp({
       const url = new URL(req.url, 'http://' + host);
       if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
         const token = randomBytes(32).toString('hex');
+        for (const [id, s] of sessions) if (Date.now() - s.created > SESSION_TTL) sessions.delete(id);
         sessions.set(token, {
           router: new RouteSession(),
           events: new Map(),
@@ -102,9 +73,10 @@ export async function createApp({
           token,
           mode: process.env.TYPESAFE_API_KEY ? 'live' : 'demo',
           executor: process.env.LLM_MODEL ? 'live' : 'demo',
-          screenpipe: process.env.SCREENPIPE_ENABLED === 'true',
-          skills: skills.map(({ slug, description, side_effect_class, context, active }) => ({
+          problems,
+          skills: skills.map(({ slug, label, description, side_effect_class, context, active }) => ({
             slug,
+            label,
             description,
             side_effect_class,
             context,
@@ -133,7 +105,7 @@ export async function createApp({
       }
       const sessionId = req.headers['x-skillrouter-session'],
         session = sessions.get(sessionId);
-      if (!session || Date.now() - session.created > 86400000) {
+      if (!session || Date.now() - session.created > SESSION_TTL) {
         send(403, { error: 'Reload to start a new session' });
         return;
       }
@@ -153,7 +125,7 @@ export async function createApp({
       });
       if (url.pathname === '/api/route') {
         const revision = ++session.revision,
-          state = trimState(await screens(body.state || {})),
+          state = trimState(body.state || {}),
           start = performance.now();
         const output = await route(state, active, { signal: controller.signal });
         if (revision !== session.revision || controller.signal.aborted) {

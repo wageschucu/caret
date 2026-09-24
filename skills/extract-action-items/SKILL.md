@@ -4,6 +4,7 @@ description: "Extract tasks and action items from notes. Not summarize prose, no
 license: MIT
 allowed-tools: text.result
 metadata:
+  label: "Extract action items"
   source: "seed"
   version: "0.1.0"
   examples: "extract action items from these meeting notes"

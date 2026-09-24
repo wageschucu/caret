@@ -2,12 +2,25 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { hash } from './core.js';
-export async function loadRegistry(root) {
+export async function loadRegistry(root, { onProblem = null } = {}) {
   const result = [];
   for (const entry of (await fs.readdir(root, { withFileTypes: true })).sort((a, b) =>
     a.name.localeCompare(b.name)
   )) {
     if (!entry.isDirectory()) continue;
+    try {
+      result.push(await loadSkill(root, entry.name));
+    } catch (e) {
+      // One broken skill must not take the whole registry down; report it and go on.
+      if (!onProblem) throw e;
+      onProblem(e.message);
+    }
+  }
+  return result;
+}
+async function loadSkill(root, name) {
+  {
+    const entry = { name };
     const file = path.join(root, entry.name, 'SKILL.md');
     const raw = await fs.readFile(file, 'utf8');
     const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
@@ -27,8 +40,9 @@ export async function loadRegistry(root) {
       ? h['allowed-tools']
       : (h['allowed-tools'] || '').split(/\s+/).filter(Boolean);
     if (tools.some((t) => typeof t !== 'string')) throw Error('Invalid tools');
-    result.push({
+    return {
       slug: h.name,
+      label: m.label || h.name,
       description: h.description,
       examples: m.examples || '',
       body: match[2],
@@ -41,9 +55,8 @@ export async function loadRegistry(root) {
       origin: m.source || 'custom',
       active: m.active !== 'false',
       digest: hash(raw),
-    });
+    };
   }
-  return result;
 }
 export const registryHash = (skills) =>
   hash(

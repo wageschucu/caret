@@ -17,16 +17,7 @@ let token,
   composition = false,
   mode = 'demo',
   slotAnswers = {};
-const labels = {
-  translate: 'Translate',
-  rewrite: 'Rewrite',
-  'summarize-selection': 'Summarize',
-  'draft-email': 'Draft email',
-  'calendar-event': 'Create event',
-  'web-search': 'Web search',
-  'extract-action-items': 'Extract action items',
-  'file-save': 'Save file',
-};
+const label = (slug) => skills.find((s) => s.slug === slug)?.label || slug;
 async function api(endpoint, body = {}, signal) {
   const r = await fetch('/api/' + endpoint, {
     method: 'POST',
@@ -51,7 +42,6 @@ function state() {
     window_title: 'Your space to think',
     selection: $('selection-context').value,
     focused_window: $('window-context').value,
-    screen_context: $('screen-context').checked,
     paused: $('paused').checked,
     deny_apps: $('deny-apps')
       .value.split(',')
@@ -76,7 +66,7 @@ function render() {
   chips.forEach((slug, i) => {
     const button = document.createElement('button');
     button.className = 'chip' + (i === chosen ? ' selected' : '');
-    button.textContent = (labels[slug] || slug) + ' ↗';
+    button.textContent = label(slug) + ' ↗';
     button.setAttribute('aria-pressed', String(i === chosen));
     const key = document.createElement('kbd');
     key.textContent = binding();
@@ -107,7 +97,7 @@ async function requestRoute(v) {
     }
   }
 }
-async function input({ keepChip = false } = {}) {
+async function input() {
   if (composition) return;
   const v = ++revision;
   lastTyped = performance.now();
@@ -181,7 +171,7 @@ function insertGhost(wordOnly = false) {
   editor.value += text;
   ghost = ghost.slice(text.length);
   telemetry(wordOnly ? 'ctrl_right' : 'ghost_accepted');
-  input({ keepChip: wordOnly });
+  input();
   editor.focus();
   editor.setSelectionRange(editor.value.length, editor.value.length);
 }
@@ -415,10 +405,11 @@ try {
         ? 'Jev routing is live; executor is in demo mode.'
         : ''
   );
+  if (boot.problems?.length) notice('Skipped invalid skills: ' + boot.problems.join(' · '));
   for (const skill of skills) {
     const card = element('article', undefined, 'skill-card');
     card.append(
-      element('h3', labels[skill.slug] || skill.slug),
+      element('h3', skill.label),
       element('p', skill.description),
       element(
         'small',

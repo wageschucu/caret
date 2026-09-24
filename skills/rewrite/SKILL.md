@@ -4,6 +4,7 @@ description: "Rewrite text in the same language for tone or clarity. Not transla
 license: MIT
 allowed-tools: text.result
 metadata:
+  label: "Rewrite"
   source: "seed"
   version: "0.1.0"
   examples: "make this sound more professional"

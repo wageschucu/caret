@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { permission, forwardContext, hash, redact } from './core.js';
+import { permission, forwardContext, hash } from './core.js';
 import { chat } from './providers.js';
 export function validatePlan(plan, gate) {
   if (
@@ -20,7 +20,9 @@ export function validatePlan(plan, gate) {
     if (call.tool === 'text.result' && typeof a.text !== 'string') throw Error('Text result is missing');
     if (
       call.tool === 'file.save' &&
-      (!/^[a-zA-Z0-9][a-zA-Z0-9_. -]{0,100}$/.test(a.filename) || typeof a.content !== 'string')
+      (!/^[a-zA-Z0-9][a-zA-Z0-9_. -]{0,100}$/.test(a.filename) ||
+        /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$)/i.test(a.filename) ||
+        typeof a.content !== 'string')
     )
       throw Error('Use a simple filename without folders');
     if (
@@ -122,7 +124,7 @@ function demoPlan(skill, context, fields) {
 export async function prepare(skill, state, fields = {}) {
   const gate = permission(skill),
     context = forwardContext(skill, state);
-  fields = Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, redact(v).slice(0, 6000)]));
+  fields = Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, String(v ?? '').slice(0, 6000)]));
   let plan;
   if (!process.env.LLM_MODEL) plan = demoPlan(skill, context, fields);
   else {
@@ -145,6 +147,8 @@ export async function prepare(skill, state, fields = {}) {
   validatePlan(plan, gate);
   return { skill, gate, context, plan };
 }
+const PREVIEW_TTL = 600000,
+  MAX_UNDOS = 50;
 export class Executions {
   constructor(root, log) {
     this.root = root;
@@ -152,7 +156,13 @@ export class Executions {
     this.pending = new Map();
     this.undos = new Map();
   }
+  prune() {
+    for (const [id, item] of this.pending)
+      if (Date.now() - item.created > PREVIEW_TTL) this.pending.delete(id);
+    while (this.undos.size > MAX_UNDOS) this.undos.delete(this.undos.keys().next().value);
+  }
   async accept(prepared, routeId, session) {
+    this.prune();
     const item = { ...prepared, id: randomUUID(), routeId, session, created: Date.now() };
     const needsPreview = item.gate.preview || item.plan.missing_slots.length > 0;
     if (needsPreview) {
@@ -176,7 +186,7 @@ export class Executions {
   }
   async confirm(id, session) {
     const item = this.pending.get(id);
-    if (!item || item.session !== session || Date.now() - item.created > 600000)
+    if (!item || item.session !== session || Date.now() - item.created > PREVIEW_TTL)
       throw Error('Preview expired. Accept the skill again.');
     if (item.plan.missing_slots.length) throw Error('Fill missing slots before confirming');
     this.pending.delete(id); // Consume before any I/O, including concurrent confirmations.

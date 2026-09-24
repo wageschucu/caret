@@ -62,8 +62,7 @@
         <button id="context-toggle" class="quiet">Context settings <span>+</span></button>
       </section>
       <section id="context-panel" hidden class="settings">
-        <label><input id="screen-context" type="checkbox" /> Include screen context</label
-        ><label><input id="paused" type="checkbox" /> Pause context capture</label
+        <label><input id="paused" type="checkbox" /> Pause context capture</label
         ><label
           ><input id="tab-safe" type="checkbox" checked /> Use Tab to accept (otherwise Ctrl Space)</label
         ><label>Active app<input id="active-app" value="SkillRouter" /></label
@@ -83,9 +82,8 @@
           ></textarea>
         </label>
         <p>
-          Screen context is off by default. Enabling it permits trimmed, redacted text to be sent to
-          configured model services. Screenpipe must be separately enabled in .env; its continuous local
-          recording is managed by Screenpipe.
+          This browser host has no access to other windows. Paste reference text above; the native macOS host
+          will supply the focused field, selection, and recent windows through the Accessibility API.
         </p>
       </section>
       <footer>

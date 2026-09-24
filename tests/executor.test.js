@@ -87,3 +87,25 @@ test('tool validation blocks undeclared calls, traversal and invalid calendar da
     )
   );
 });
+test('windows reserved device names are rejected as filenames', () => {
+  const gate = permission({
+    trust: 'trusted',
+    side_effect_class: 'reversible',
+    allowed_tools: ['file.save'],
+  });
+  for (const filename of ['con', 'NUL.txt', 'com1.md'])
+    assert.throws(() =>
+      validatePlan(
+        { preview: 'x', missing_slots: [], calls: [{ tool: 'file.save', args: { filename, content: 'x' } }] },
+        gate
+      )
+    );
+  validatePlan(
+    {
+      preview: 'x',
+      missing_slots: [],
+      calls: [{ tool: 'file.save', args: { filename: 'console.md', content: 'x' } }],
+    },
+    gate
+  );
+});

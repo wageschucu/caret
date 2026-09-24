@@ -4,6 +4,7 @@ description: "Draft or reply to an email. Not send email, not write a chat messa
 license: MIT
 allowed-tools: text.result
 metadata:
+  label: "Draft email"
   source: "seed"
   version: "0.1.0"
   examples: "draft a reply thanking Sam"

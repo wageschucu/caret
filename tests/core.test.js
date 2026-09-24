@@ -139,3 +139,20 @@ test('state budget terminates on large multilingual selections and keeps newest 
   assert.equal(recent[0].text, 'Screen 3');
   assert.equal(recent[3].text, 'Screen 0');
 });
+test('a broken skill is reported and skipped instead of failing the registry', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'skillrouter-registry-'));
+  await fs.cp(new URL('../skills', import.meta.url).pathname, root, { recursive: true });
+  await fs.mkdir(path.join(root, 'broken'));
+  await fs.writeFile(path.join(root, 'broken', 'SKILL.md'), 'no frontmatter');
+  const problems = [];
+  const loaded = await loadRegistry(root, { onProblem: (m) => problems.push(m) });
+  assert.equal(loaded.length, 8);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /broken/);
+  await assert.rejects(loadRegistry(root));
+  assert.equal(loaded.find((s) => s.slug === 'translate').label, 'Translate');
+  await fs.rm(root, { recursive: true, force: true });
+});

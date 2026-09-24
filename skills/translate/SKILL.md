@@ -4,6 +4,7 @@ description: "Translate text into another language. Not rewrite in the same lang
 license: MIT
 allowed-tools: text.result
 metadata:
+  label: "Translate"
   source: "seed"
   version: "0.1.0"
   examples: "translate hello into Spanish"

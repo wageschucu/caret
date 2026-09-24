@@ -4,6 +4,7 @@ description: "Save text into a new local file. Not delete files, not send a docu
 license: MIT
 allowed-tools: file.save
 metadata:
+  label: "Save file"
   source: "seed"
   version: "0.1.0"
   examples: "save these notes as meeting.md"

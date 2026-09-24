@@ -9,6 +9,7 @@ export const THRESHOLDS = Object.freeze({
   hold: 0.35,
   largeSet: 20,
   ratio: 2,
+  largeSetMargin: 0.02,
 });
 export const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const redact = (text) =>
@@ -107,7 +108,7 @@ export function selectRoute(ready, distribution, previous = [], buffer = 'x') {
   if (ready < THRESHOLDS.ready) return [];
   if (all.length > THRESHOLDS.largeSet) {
     if (p / Math.max(second, 1e-9) >= THRESHOLDS.ratio) return [top];
-    return margin >= 0.02 ? skills.slice(0, 2).map(([k]) => k) : [];
+    return margin >= THRESHOLDS.largeSetMargin ? skills.slice(0, 2).map(([k]) => k) : [];
   }
   if (p < THRESHOLDS.entry) return [];
   return p >= THRESHOLDS.single && margin + 1e-9 >= THRESHOLDS.margin
