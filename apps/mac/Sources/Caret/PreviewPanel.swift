@@ -7,7 +7,14 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
   var onCancel: () -> Void = {}
   var onUndo: () -> Void = {}
   private var fields: [String: NSTextField] = [:]
+  private var pickers: [String: NSDatePicker] = [:]
   private let stack = NSStackView()
+  private static let iso: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
+    return f
+  }()
 
   init() {
     super.init(
@@ -44,6 +51,7 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
   private func reset() {
     stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
     fields = [:]
+    pickers = [:]
   }
 
   private func heading(_ text: String) -> NSTextField {
@@ -80,7 +88,40 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
     return scroll
   }
 
-  func showPreview(_ execution: HelperClient.Execution, label: String) {
+  /// Sensible defaults for slots, derived from the typed sentence so Enter alone can accept them.
+  static func defaults(for slots: [String], buffer: String) -> (dates: [String: Date], texts: [String: String]) {
+    var dates: [String: Date] = [:]
+    var texts: [String: String] = [:]
+    let calendar = Calendar.current
+    let lower = buffer.lowercased()
+    var start: Date
+    if lower.contains("tomorrow"), let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) {
+      start = calendar.date(bySettingHour: 10, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+    } else {
+      let next = Date().addingTimeInterval(3600)
+      start = calendar.date(bySetting: .minute, value: 0, of: next) ?? next
+      start = calendar.date(bySetting: .second, value: 0, of: start) ?? start
+    }
+    if let match = lower.range(of: #"\bat (\d{1,2})(?::(\d{2}))?\s*(am|pm)?"#, options: .regularExpression) {
+      let parts = lower[match].replacingOccurrences(of: "at ", with: "").split(separator: ":")
+      var hour = Int(parts.first?.prefix(while: \.isNumber) ?? "") ?? 10
+      if lower[match].hasSuffix("pm"), hour < 12 { hour += 12 }
+      start = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: start) ?? start
+    }
+    if slots.contains("start") { dates["start"] = start }
+    if slots.contains("end") { dates["end"] = start.addingTimeInterval(3600) }
+    if slots.contains("title") {
+      var title = buffer.replacingOccurrences(
+        of: #"^\s*(schedule|create|plan|book|set up|add)\s+(a|an|the)?\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
+      title = title.replacingOccurrences(
+        of: #"\s*\b(tomorrow|today|tonight|next \w+|on \w+|at \d.*)$"#, with: "", options: [.regularExpression, .caseInsensitive])
+      title = title.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+      if !title.isEmpty { texts["title"] = title.prefix(1).uppercased() + title.dropFirst() }
+    }
+    return (dates, texts)
+  }
+
+  func showPreview(_ execution: HelperClient.Execution, label: String, buffer: String = "") {
     reset()
     stack.addArrangedSubview(heading("A quick look before we continue."))
     stack.addArrangedSubview(muted(label))
@@ -93,16 +134,27 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
         .flatMap { String(data: $0, encoding: .utf8) } ?? ""
       stack.addArrangedSubview(block(tool + "\n" + json, mono: true))
     }
+    let defaults = Self.defaults(for: execution.missingSlots, buffer: buffer)
     for slot in execution.missingSlots {
-      let field = NSTextField(string: "")
-      field.placeholderString = slot == "start" || slot == "end" ? "2026-09-25T10:00:00+02:00" : slot
-      field.translatesAutoresizingMaskIntoConstraints = false
-      field.widthAnchor.constraint(equalToConstant: 484).isActive = true
       let label = NSTextField(labelWithString: slot)
       label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
       stack.addArrangedSubview(label)
-      stack.addArrangedSubview(field)
-      fields[slot] = field
+      if let date = defaults.dates[slot] {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = [.yearMonthDay, .hourMinute]
+        picker.dateValue = date
+        picker.sizeToFit()
+        stack.addArrangedSubview(picker)
+        pickers[slot] = picker
+      } else {
+        let field = NSTextField(string: defaults.texts[slot] ?? "")
+        field.placeholderString = slot
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.widthAnchor.constraint(equalToConstant: 484).isActive = true
+        stack.addArrangedSubview(field)
+        fields[slot] = field
+      }
     }
     let primaryTitle =
       !execution.missingSlots.isEmpty
@@ -117,7 +169,10 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
     row.orientation = .horizontal
     stack.addArrangedSubview(row)
     present()
-    if let first = execution.missingSlots.first, let field = fields[first] { makeFirstResponder(field) }
+    if let first = execution.missingSlots.first {
+      makeFirstResponder(fields[first] ?? pickers[first])
+      fields[first]?.selectText(nil)
+    }
   }
 
   /// Result of a side-effecting action. Text results are inserted at the caret instead and never come here.
@@ -166,6 +221,7 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
   @objc private func submit() {
     var values: [String: String] = [:]
     for (name, field) in fields { values[name] = field.stringValue }
+    for (name, picker) in pickers { values[name] = Self.iso.string(from: picker.dateValue) }
     onSubmit(values)
   }
 

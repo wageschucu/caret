@@ -356,7 +356,7 @@ final class Controller {
     if execution.status == "preview" {
       preview = execution
       syncKeyState()
-      previewPanel.showPreview(execution, label: client.label(for: execution.skill))
+      previewPanel.showPreview(execution, label: client.label(for: execution.skill), buffer: buffer)
       return
     }
     preview = nil
