@@ -229,6 +229,18 @@ final class AccessibilityReader {
   // MARK: - Insertion
 
   /// Inserts text at the caret. Accessibility first (atomic, layout-independent), then synthetic keystrokes.
+  /// True for fields inside a browser or Electron page. Chromium accepts a selection change through
+  /// Accessibility but silently ignores text replacement, so those fields are typed into instead.
+  static func isWebContent(_ element: AXUIElement) -> Bool {
+    var current: AXUIElement? = element
+    for _ in 0..<25 {
+      guard let node = current else { return false }
+      if string(node, kAXRoleAttribute) == "AXWebArea" { return true }
+      current = attribute(node, kAXParentAttribute).map { $0 as! AXUIElement }
+    }
+    return false
+  }
+
   /// Replaces the `length` UTF-16 units before the caret (the intent the user typed) with `text`.
   /// Falls back to plain insertion when the app does not let us move the selection.
   static func replaceBeforeCaret(length: Int, with text: String, in element: AXUIElement?) {
@@ -241,19 +253,23 @@ final class AccessibilityReader {
         let check = range(element, kAXSelectedTextRangeAttribute), check.location == target.location,
         check.length == length
       {
-        insert(text, into: element)
+        insert(text, into: element)  // replaces the selection
         return
       }
     }
     insert(text, into: element)
   }
 
+  /// Inserts at the caret (or over the selection). Accessibility first for native apps, verified;
+  /// synthetic keystrokes for web content and whenever Accessibility did not actually change the value.
   static func insert(_ text: String, into element: AXUIElement?) {
-    if let element {
+    if let element, !isWebContent(element) {
       var settable = DarwinBoolean(false)
+      let before = string(element, kAXValueAttribute)
       if AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
         settable.boolValue,
-        AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success
+        AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success,
+        before == nil || string(element, kAXValueAttribute) != before
       {
         return
       }
