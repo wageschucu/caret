@@ -25,6 +25,8 @@ struct FocusSnapshot {
 
   /// Windows captured before this read, newest last. In memory only.
   let recent: [RecentWindow]
+  /// WebKit editors only: the caret's text marker and character index, used to select the intent text.
+  var webKitCaret: (marker: CFTypeRef, index: Int)? = nil
 
   /// Text before the caret, limited to the current paragraph (or line) and a sane length.
   func buffer(lineOnly: Bool) -> String {
@@ -111,6 +113,52 @@ final class AccessibilityReader {
     return error == .success ? value as? String : nil
   }
 
+  static func parameterized(_ element: AXUIElement, _ name: String, _ parameter: CFTypeRef) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let error = AXUIElementCopyParameterizedAttributeValue(element, name as CFString, parameter, &value)
+    return error == .success ? value : nil
+  }
+
+  // MARK: - WebKit text markers (Mail compose, Notes, Safari editable areas)
+
+  /// The marker at the end of the selection, i.e. the caret.
+  static func webKitCaretMarker(_ element: AXUIElement) -> CFTypeRef? {
+    guard let selection = attribute(element, "AXSelectedTextMarkerRange") else { return nil }
+    if let end = parameterized(element, "AXEndTextMarkerForTextMarkerRange", selection) { return end }
+    // Older WebKit: resolve the caret through its on-screen position.
+    guard let bounds = rect(parameterized(element, "AXBoundsForTextMarkerRange", selection)) else { return nil }
+    var point = CGPoint(x: bounds.maxX, y: bounds.midY)
+    guard let position = AXValueCreate(.cgPoint, &point) else { return nil }
+    return parameterized(element, "AXTextMarkerForPosition", position)
+  }
+
+  /// Text from the start of the document to the caret, the caret's character index, and its bounds.
+  static func webKitBeforeCaret(_ element: AXUIElement) -> (text: String, index: Int, marker: CFTypeRef, bounds: CGRect?)? {
+    guard let caret = webKitCaretMarker(element), let start = attribute(element, "AXStartTextMarker"),
+      let range = parameterized(element, "AXTextMarkerRangeForTextMarkers", [start, caret] as CFArray),
+      let text = parameterized(element, "AXStringForTextMarkerRange", range) as? String
+    else { return nil }
+    let index = (parameterized(element, "AXIndexForTextMarker", caret) as? Int) ?? text.utf16.count
+    var bounds: CGRect? = nil
+    if let selection = attribute(element, "AXSelectedTextMarkerRange") {
+      bounds = rect(parameterized(element, "AXBoundsForTextMarkerRange", selection))
+    }
+    return (text, index, caret, bounds)
+  }
+
+  /// Selects the `length` characters before the caret through text markers. Returns false if WebKit refused.
+  static func webKitSelectBeforeCaret(_ element: AXUIElement, caret: (marker: CFTypeRef, index: Int), length: Int) -> Bool {
+    guard length > 0, caret.index >= length,
+      let start = parameterized(element, "AXTextMarkerForIndex", (caret.index - length) as CFNumber),
+      let range = parameterized(element, "AXTextMarkerRangeForTextMarkers", [start, caret.marker] as CFArray)
+    else { return false }
+    guard AXUIElementSetAttributeValue(element, "AXSelectedTextMarkerRange" as CFString, range) == .success,
+      let check = attribute(element, "AXSelectedTextMarkerRange"),
+      let selected = parameterized(element, "AXStringForTextMarkerRange", check) as? String
+    else { return false }
+    return selected.utf16.count == length
+  }
+
   /// Quartz (top-left origin) → AppKit (bottom-left origin) screen coordinates.
   static func appKitRect(_ quartz: CGRect) -> CGRect {
     let height = NSScreen.screens.first?.frame.height ?? 0
@@ -174,7 +222,14 @@ final class AccessibilityReader {
 
     var text = Self.string(element, kAXValueAttribute) ?? ""
     var caret = selection?.location ?? text.utf16.count
-    if text.isEmpty, let selection, selection.location > 0 {
+    var webKitCaret: (marker: CFTypeRef, index: Int)? = nil
+    var webKitBounds: CGRect? = nil
+    if text.isEmpty, role == "AXWebArea", let web = Self.webKitBeforeCaret(element) {
+      text = web.text
+      caret = web.text.utf16.count
+      webKitCaret = (web.marker, web.index)
+      webKitBounds = web.bounds
+    } else if text.isEmpty, let selection, selection.location > 0 {
       // WebKit editors report an empty value on the web area; the text is only reachable by range.
       let length = min(selection.location, 20000)
       if let before = Self.stringForRange(element, location: selection.location - length, length: length) {
@@ -189,16 +244,18 @@ final class AccessibilityReader {
     let selectionLength = selection?.length ?? 0
     let selectedText = selectionLength > 0 ? (Self.string(element, kAXSelectedTextAttribute) ?? "") : ""
 
-    var caretRect = Self.boundsForRange(element, location: caret, length: 0)
+    var caretRect = webKitBounds ?? Self.boundsForRange(element, location: caret, length: 0)
     if caretRect == nil, caret > 0 {
       caretRect = Self.boundsForRange(element, location: caret - 1, length: 1).map {
         CGRect(x: $0.maxX, y: $0.minY, width: 1, height: $0.height)
       }
     }
-    return FocusSnapshot(
+    var snapshot = FocusSnapshot(
       element: element, pid: pid, role: role, subrole: subrole, bundleID: bundleID, appName: appName,
       windowTitle: windowTitle, text: text, caret: caret, selectionLength: selectionLength, selectedText: selectedText, secure: false,
       caretRect: caretRect.map(Self.appKitRect), frame: Self.frame(element).map(Self.appKitRect), recent: recent)
+    snapshot.webKitCaret = webKitCaret
+    return snapshot
   }
 
   /// Chromium and Electron apps expose a skeleton accessibility tree until an assistive client asks
@@ -264,7 +321,12 @@ final class AccessibilityReader {
 
   /// Replaces the `length` UTF-16 units before the caret (the intent the user typed) with `text`.
   /// Falls back to plain insertion when the app does not let us move the selection.
-  static func replaceBeforeCaret(length: Int, with text: String, in element: AXUIElement?) {
+  static func replaceBeforeCaret(length: Int, with text: String, in snapshot: FocusSnapshot?) {
+    let element = snapshot?.element
+    if let element, let caret = snapshot?.webKitCaret {
+      if webKitSelectBeforeCaret(element, caret: caret, length: length) { typeUnicode(text) } else { insert(text, into: element) }
+      return
+    }
     if let element, length > 0, let selection = range(element, kAXSelectedTextRangeAttribute),
       selection.location >= length
     {

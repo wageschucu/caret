@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     contextItem.target = self
     menu.addItem(contextItem)
     menu.addItem(withTitle: "Copy last state (debug)", action: #selector(copyState), keyEquivalent: "").target = self
+    menu.addItem(withTitle: "Diagnose focused field in 5 s (debug)", action: #selector(diagnose), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Open helper page", action: #selector(openHelper), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Open Accessibility settings", action: #selector(openAccessibility), keyEquivalent: "")
       .target = self
@@ -87,6 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func copyState() {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(controller.lastStateJSON, forType: .string)
+  }
+  @objc private func diagnose() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { Diagnostics.dumpFocusedElement() }
   }
   @objc private func openHelper() { NSWorkspace.shared.open(Settings.helperURL) }
   @objc private func openAccessibility() {

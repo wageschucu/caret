@@ -387,7 +387,7 @@ final class Controller {
       // Text results replace the typed intent, after focus returns to the field.
       previewPanel.orderOut(nil)
       await returnFocus()
-      AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: result, in: snapshot?.element)
+      AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: result, in: snapshot)
       scheduleRefresh()
     } else {
       calendarUndo = nil
