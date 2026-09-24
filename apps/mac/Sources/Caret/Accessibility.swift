@@ -199,6 +199,25 @@ final class AccessibilityReader {
   // MARK: - Insertion
 
   /// Inserts text at the caret. Accessibility first (atomic, layout-independent), then synthetic keystrokes.
+  /// Replaces the `length` UTF-16 units before the caret (the intent the user typed) with `text`.
+  /// Falls back to plain insertion when the app does not let us move the selection.
+  static func replaceBeforeCaret(length: Int, with text: String, in element: AXUIElement?) {
+    if let element, length > 0, let selection = range(element, kAXSelectedTextRangeAttribute),
+      selection.location >= length
+    {
+      var target = CFRange(location: selection.location - length, length: length)
+      if let value = AXValueCreate(.cfRange, &target),
+        AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success,
+        let check = range(element, kAXSelectedTextRangeAttribute), check.location == target.location,
+        check.length == length
+      {
+        insert(text, into: element)
+        return
+      }
+    }
+    insert(text, into: element)
+  }
+
   static func insert(_ text: String, into element: AXUIElement?) {
     if let element {
       var settable = DarwinBoolean(false)

@@ -345,10 +345,10 @@ final class Controller {
     preview = nil
     let effect = client.skill(execution.skill)?.side_effect_class ?? "preview-only"
     if effect == "preview-only", let result = execution.result {
-      // Text results go straight to the caret, after focus returns to the field.
+      // Text results replace the typed intent, after focus returns to the field.
       previewPanel.orderOut(nil)
       await returnFocus()
-      AccessibilityReader.insert(result, into: snapshot?.element)
+      AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: result, in: snapshot?.element)
       scheduleRefresh()
     } else {
       previewPanel.showDone(execution)

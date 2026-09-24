@@ -82,9 +82,12 @@ function demoPlan(skill, context, fields) {
         french: { hello: 'Bonjour', 'thank you': 'Merci' },
         german: { hello: 'Hallo', 'thank you': 'Danke' },
       };
-      text =
-        dictionary[language?.toLowerCase()]?.[source?.toLowerCase()] ||
-        'Demo supports “hello” and “thank you” in Spanish, French, or German. Configure LLM_MODEL for unrestricted translation.';
+      text = dictionary[language?.toLowerCase()]?.[source?.toLowerCase()] || '';
+      // A demo limitation is an error for the host to show, never text that lands in the user's document.
+      if (!missing.length && !text)
+        throw Error(
+          'Demo translation supports only “hello” and “thank you” in Spanish, French, or German. Configure LLM_MODEL for unrestricted translation.'
+        );
       break;
     }
     case 'draft-email':
