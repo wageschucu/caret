@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var statusLine: NSMenuItem!
   private var pauseItem: NSMenuItem!
   private var contextItem: NSMenuItem!
+  private let statusWindow = StatusWindow()
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -36,7 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.delegate = self
     statusItem.menu = menu
 
-    controller.onStatus = { [weak self] text in self?.statusLine.title = text }
+    statusWindow.onOpenSettings = { [weak self] in self?.openAccessibility() }
+    statusWindow.onQuit = { NSApp.terminate(nil) }
+    controller.onStatus = { [weak self] text in
+      self?.statusLine.title = text
+      // Anything other than a connected, trusted state deserves a visible window.
+      let ok = text.hasPrefix("Helper:") && !text.contains("waiting")
+      self?.statusWindow.update(status: text, needsAttention: !ok)
+    }
     controller.start()
   }
 
