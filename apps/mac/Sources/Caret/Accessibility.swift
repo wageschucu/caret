@@ -269,13 +269,27 @@ final class AccessibilityReader {
 
   // MARK: - Recent windows
 
+  /// Captures the frontmost app's focused window when it changed, whether or not a field is focused.
+  /// Called on app switches and on a slow timer, so a page the user is only reading is captured too.
+  func captureFrontWindow() {
+    guard Settings.screenContext, !IsSecureEventInputEnabled(),
+      let app = NSWorkspace.shared.frontmostApplication, let bundleID = app.bundleIdentifier,
+      bundleID != Bundle.main.bundleIdentifier, !Settings.denyApps.contains(bundleID)
+    else { return }
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    enableFullTree(appElement, pid: app.processIdentifier)
+    let window = Self.attribute(appElement, kAXFocusedWindowAttribute).map { $0 as! AXUIElement }
+    let title = window.flatMap { Self.string($0, kAXTitleAttribute) } ?? ""
+    captureWindowIfChanged(window, bundleID: bundleID, title: title)
+  }
+
   private func captureWindowIfChanged(_ window: AXUIElement?, bundleID: String, title: String) {
-    guard Settings.screenContext, let window else { return }
+    guard Settings.screenContext, let window, !Settings.denyApps.contains(bundleID) else { return }
     let key = bundleID + "\u{1}" + title
     guard key != lastWindowKey else { return }
     lastWindowKey = key
     var parts: [String] = []
-    var budget = 2000
+    var budget = 3000
     Self.collectText(window, depth: 0, parts: &parts, budget: &budget)
     let text = parts.joined(separator: "\n")
     guard !text.isEmpty else { return }
@@ -297,8 +311,10 @@ final class AccessibilityReader {
         return
       }
     }
+    // Toolbars, menus and tab bars are chrome, not content.
+    if [kAXToolbarRole, kAXMenuBarRole, kAXTabGroupRole, "AXToolbar"].contains(role) { return }
     guard let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] else { return }
-    for child in children.prefix(60) {
+    for child in children.prefix(80) {
       collectText(child, depth: depth + 1, parts: &parts, budget: &budget)
       if budget <= 0 { return }
     }

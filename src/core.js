@@ -11,6 +11,7 @@ export const THRESHOLDS = Object.freeze({
   ratio: 2,
   largeSetMargin: 0.02,
 });
+export const STATE_BYTES = 8000;
 export const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const redact = (text) =>
   String(text ?? '')
@@ -58,7 +59,7 @@ export function trimState(input = {}, now = Date.now()) {
           return true;
         })
         .join('\n')
-        .slice(0, 2000);
+        .slice(0, 3000);
       if (text)
         state.screens.unshift({
           t: s.t,
@@ -68,10 +69,11 @@ export function trimState(input = {}, now = Date.now()) {
         });
       if (state.screens.length === 4) break;
     }
-    state.focused_window = clip(input.focused_window, 2000);
+    state.focused_window = clip(input.focused_window, 3000);
   }
   // UTF-8 byte count is a conservative token upper bound, including multilingual text.
-  while (Buffer.byteLength(JSON.stringify(state)) > 4000) {
+  // 8,000 UTF-8 bytes is at most ~8k tokens (the spec's hard cap) and typically ~2-3k.
+  while (Buffer.byteLength(JSON.stringify(state)) > STATE_BYTES) {
     if (state.screens.length) state.screens.shift();
     else {
       const key = ['focused_window', 'selection', 'url', 'window_title', 'active_app', 'buffer'].find(

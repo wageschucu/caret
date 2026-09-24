@@ -42,6 +42,12 @@ final class HelperLauncher {
     }
   }
 
+  /// Allows another start after the helper died or was stopped.
+  func reset() {
+    attempted = false
+    process = nil
+  }
+
   /// Stops a helper this app started; one started by the user is left alone.
   func stop() {
     process?.terminate()

@@ -8,6 +8,11 @@ final class Controller {
   var onStatus: (String, Bool) -> Void = { _, _ in }
   private func status(_ text: String, attention: Bool = false) { onStatus(text, attention) }
 
+  private static func isConnectionFailure(_ error: Error) -> Bool {
+    guard let code = (error as? URLError)?.code else { return false }
+    return [.cannotConnectToHost, .networkConnectionLost, .cannotFindHost, .timedOut].contains(code)
+  }
+
   /// Cancellations from typing on are normal, not failures.
   private static func isCancellation(_ error: Error) -> Bool {
     error is CancellationError || (error as? URLError)?.code == .cancelled
@@ -57,6 +62,12 @@ final class Controller {
     ) { [weak self] _ in Task { @MainActor in self?.appSwitched() } }
     Task { await connect() }
     waitForTrust()
+    // Recent-window capture: a page the user only reads never triggers a keystroke, so poll slowly.
+    Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
+      guard let self, Settings.screenContext, !Settings.paused else { return }
+      let reader = self.reader
+      self.axQueue.async { reader.captureFrontWindow() }
+    }
   }
 
   private var promptedForTrust = false
@@ -115,6 +126,8 @@ final class Controller {
   private func appSwitched() {
     clearSuggestions()
     overlay.hide()
+    let reader = reader
+    axQueue.async { reader.captureFrontWindow() }
     scheduleRefresh()
   }
 
@@ -272,7 +285,15 @@ final class Controller {
         chips = []
         render()
         Diagnostics.log("route failed: \(error.localizedDescription)")
-        status("Router: \(error.localizedDescription)")
+        if Self.isConnectionFailure(error) {
+          // The helper died or was restarted: bring it back and reconnect.
+          connected = false
+          launcher.reset()
+          status("Helper unreachable — restarting it")
+          Task { await connect() }
+        } else {
+          status("Router: \(error.localizedDescription)")
+        }
       }
     }
   }

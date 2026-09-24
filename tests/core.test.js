@@ -127,7 +127,7 @@ test('seed registry is portable, hash changes on edits, and Jev never sees bodie
 });
 test('state budget terminates on large multilingual selections and keeps newest screens', () => {
   const s = trimState({ buffer: '😀'.repeat(6000), selection: '😀'.repeat(3000), url: '😀'.repeat(1000) });
-  assert(Buffer.byteLength(JSON.stringify(s)) <= 4000);
+  assert(Buffer.byteLength(JSON.stringify(s)) <= 8000);
   const now = Date.now(),
     screens = Array.from({ length: 10 }, (_, i) => ({
       t: new Date(now - i * 1000).toISOString(),

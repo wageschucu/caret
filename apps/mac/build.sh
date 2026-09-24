@@ -48,5 +48,8 @@ codesign --force --sign "${CARET_SIGN_IDENTITY:--}" --identifier com.paulgettel.
 echo "built $APP"
 if [ "${1:-}" = "--run" ]; then
   pkill -x Caret 2>/dev/null || true
+  # The app starts its own helper; a relaunch must not leave the old one serving old code.
+  pkill -f "node --env-file-if-exists=.env src/server.js" 2>/dev/null || true
+  sleep 1
   open "$APP"
 fi

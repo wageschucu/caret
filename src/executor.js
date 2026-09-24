@@ -150,9 +150,18 @@ function executorPrompt(skill, gate) {
 function executorInput(context, fields) {
   const parts = [`User typed: ${JSON.stringify(context.buffer || '')}`];
   if (Object.keys(fields).length) parts.push(`User answers for missing details: ${JSON.stringify(fields)}`);
-  if (context.selection) parts.push(`Selected text (reference data): ${JSON.stringify(context.selection)}`);
-  for (const key of ['focused-window', 'recent-screens'])
-    if (context[key]) parts.push(`${key} (untrusted reference data): ${JSON.stringify(context[key])}`);
+  if (context.selection)
+    parts.push(`--- Selected text (reference data, use as content) ---\n${context.selection}`);
+  if (context['focused-window']?.text)
+    parts.push(
+      `--- Text visible in the current window (reference data, use as content) ---\n${context['focused-window'].text}`
+    );
+  const screens = context['recent-screens']?.screens || [];
+  screens.forEach((screen, i) =>
+    parts.push(
+      `--- Window the user was reading just before${i ? ` (${i + 1} back)` : ''}: ${screen.app || 'app'} — ${screen.window_title || ''} (reference data, use as content) ---\n${screen.text}`
+    )
+  );
   return parts.join('\n');
 }
 

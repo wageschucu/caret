@@ -33,7 +33,7 @@ The first launch after switching identities needs one more grant; after that reb
 - Draws ghost text and action chips in a floating panel under the caret. Tab accepts (Ctrl-Space in terminals and IDEs), Ctrl-→ or ⌥-→ takes one ghost word, ↑/↓ cycles chips, Esc dismisses. Enter is never intercepted.
 - Opens a preview window for anything that needs slots or confirmation. Text results are inserted at the caret; file and calendar results show a panel with Undo.
 
-Recent-window context is **off** by default (menu → "Include recent windows as context"). When on, the visible text of the focused window is captured in memory on focus changes and sent as `screens`; nothing is written to disk.
+Recent-window context is **off** by default (menu → "Include recent windows as context"). When on, the visible text of the front window is captured in memory whenever the window changes (checked on app switches and every 4 s), kept for the last four windows, and sent as `screens`; nothing is written to disk, deny-listed apps and secure input are skipped. This is what lets `summarize what I was just reading` or `extract action items from that` work on a page you read in another app.
 
 ## Debugging
 
