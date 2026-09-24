@@ -368,6 +368,7 @@ final class Controller {
       AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: result, in: snapshot?.element)
       scheduleRefresh()
     } else {
+      lastUndoID = execution.undoID
       previewPanel.showDone(execution)
     }
   }
@@ -407,24 +408,23 @@ final class Controller {
     Task { await returnFocus() }
   }
 
+  private var lastUndoID: String?
+
   private func undo() {
-    // The done panel is only shown for side-effecting results; its undo id lives in the last execution.
-    guard let id = lastUndoID else { return }
+    guard let id = lastUndoID else {
+      previewPanel.showError("Nothing to undo.")
+      return
+    }
     Task {
       do {
         try await client.undo(id: id)
         lastUndoID = nil
-        previewPanel.showError("Undone.")
+        previewPanel.showNotice("Undone. The record was removed.")
       } catch {
         previewPanel.showError(error.localizedDescription)
       }
     }
   }
-  private var lastUndoID: String? {
-    get { _lastUndo }
-    set { _lastUndo = newValue }
-  }
-  private var _lastUndo: String?
 
   /// The preview is a non-activating panel, so the host app normally stays active. Re-activate it
   /// only if something else took over meanwhile.

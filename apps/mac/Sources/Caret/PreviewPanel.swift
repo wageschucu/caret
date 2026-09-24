@@ -196,6 +196,17 @@ final class PreviewPanel: NSPanel, NSWindowDelegate {
     present()
   }
 
+  func showNotice(_ message: String) {
+    reset()
+    stack.addArrangedSubview(heading("Done."))
+    stack.addArrangedSubview(block(message, mono: false))
+    let close = NSButton(title: "Close", target: self, action: #selector(cancelPressed))
+    close.keyEquivalent = "\r"
+    close.bezelStyle = .rounded
+    stack.addArrangedSubview(close)
+    present()
+  }
+
   func showError(_ message: String) {
     reset()
     stack.addArrangedSubview(heading("Something needs attention."))
