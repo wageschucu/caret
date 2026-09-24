@@ -20,7 +20,7 @@ macOS ties the grant to the app's code signature. With the default ad-hoc signat
 To avoid that, sign with a stable identity once:
 
 1. Keychain Access → Certificate Assistant → Create a Certificate… Name `Caret Dev`, Identity Type *Self Signed Root*, Certificate Type *Code Signing*.
-2. Build with `CARET_SIGN_IDENTITY="Caret Dev" apps/mac/build.sh --run`.
+2. Build as usual: `build.sh` uses a certificate named `Caret Dev` automatically when it exists (`CARET_SIGN_IDENTITY` overrides the name).
 
 The first launch after switching identities needs one more grant; after that rebuilds keep it.
 

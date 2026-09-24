@@ -10,8 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    statusItem.button?.title = "↗"
-    statusItem.button?.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+    if let image = NSImage(systemSymbolName: "arrow.up.right.circle.fill", accessibilityDescription: "Caret") {
+      image.isTemplate = true
+      statusItem.button?.image = image
+    } else {
+      statusItem.button?.title = "↗"
+    }
     let menu = NSMenu()
     statusLine = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
     statusLine.isEnabled = false

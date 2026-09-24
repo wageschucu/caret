@@ -32,6 +32,11 @@ EOF
 # grant to the signature, so each rebuild must be re-approved. Set CARET_SIGN_IDENTITY to the
 # name of a code-signing certificate (a self-signed one from Keychain Access is enough) to keep
 # a stable identity across rebuilds.
+# Unset: use "Caret Dev" automatically when that certificate exists.
+# (A self-signed certificate is listed as untrusted, so do not filter with -v.)
+if [ -z "${CARET_SIGN_IDENTITY:-}" ] && security find-identity -p codesigning 2>/dev/null | grep -q '"Caret Dev"'; then
+  CARET_SIGN_IDENTITY="Caret Dev"
+fi
 codesign --force --sign "${CARET_SIGN_IDENTITY:--}" --identifier com.paulgettel.caret "$APP" >/dev/null
 [ -n "${CARET_SIGN_IDENTITY:-}" ] && echo "signed with $CARET_SIGN_IDENTITY" || echo "ad-hoc signed (Accessibility must be re-granted after each rebuild; see README)"
 echo "built $APP"
