@@ -35,10 +35,7 @@ final class Controller {
   // MARK: - Lifecycle
 
   func start() {
-    tap.handler = { [weak self] event in
-      guard let self else { return false }
-      return self.handle(event)
-    }
+    tap.onAction = { [weak self] action in self?.perform(action) }
     tap.passthrough = { [weak self] in self?.scheduleRefresh() }
     previewPanel.onSubmit = { [weak self] fields in self?.submitPreview(fields) }
     previewPanel.onCancel = { [weak self] in self?.cancelPreview() }
@@ -104,6 +101,9 @@ final class Controller {
 
   // MARK: - Reading the field
 
+  private let axQueue = DispatchQueue(label: "caret.ax", qos: .userInteractive)
+  private var readGeneration = 0
+
   private func scheduleRefresh() {
     refreshTask?.cancel()
     refreshTask = Task {
@@ -113,20 +113,35 @@ final class Controller {
     }
   }
 
+  /// Reads the focused field on a background queue; Accessibility calls into Chromium can take a while.
   private func refresh() {
     guard connected, preview == nil, !busy, !Settings.paused else { return }
-    guard let current = reader.focused(), !current.secure, !Settings.denyApps.contains(current.bundleID),
+    readGeneration += 1
+    let generation = readGeneration
+    let reader = reader
+    axQueue.async {
+      let current = reader.focused()
+      DispatchQueue.main.async { [weak self] in
+        guard let self, generation == self.readGeneration, self.preview == nil, !self.busy else { return }
+        self.apply(current)
+      }
+    }
+  }
+
+  private func apply(_ current: FocusSnapshot?) {
+    guard let current, !current.secure, !Settings.denyApps.contains(current.bundleID),
       current.bundleID != Bundle.main.bundleIdentifier
     else {
       snapshot = nil
       clearSuggestions()
-      overlay.hide()
+      render()
       return
     }
     let sameField = snapshot.map { CFEqual($0.element, current.element) } ?? false
-    let newBuffer = current.buffer
     if !sameField { Diagnostics.focus(current) }
     snapshot = current
+    // Terminals and editors work line by line; prose works by paragraph.
+    let newBuffer = current.buffer(lineOnly: !tabSafe)
     if sameField && newBuffer == buffer {
       render()
       return
@@ -138,14 +153,14 @@ final class Controller {
   /// State object for the helper, identical in shape to the browser host's.
   private func state() -> [String: Any] {
     guard let s = snapshot else { return ["buffer": buffer] }
-    let screens: [[String: Any]] = reader.recent.filter { $0.bundleID != s.bundleID || $0.windowTitle != s.windowTitle }
+    let screens: [[String: Any]] = s.recent.filter { $0.bundleID != s.bundleID || $0.windowTitle != s.windowTitle }
       .map {
         [
           "t": ISO8601DateFormatter().string(from: $0.timestamp), "app": $0.bundleID,
           "window_title": $0.windowTitle, "text": $0.text,
         ]
       }
-    let focusedWindow = reader.recent.last { $0.bundleID == s.bundleID && $0.windowTitle == s.windowTitle }?.text ?? ""
+    let focusedWindow = s.recent.last { $0.bundleID == s.bundleID && $0.windowTitle == s.windowTitle }?.text ?? ""
     let state: [String: Any] = [
       "buffer": buffer, "active_app": s.bundleID, "window_title": s.windowTitle, "url": NSNull(),
       "selection": s.selectedText, "focused_window": focusedWindow, "secure": s.secure,
@@ -250,7 +265,14 @@ final class Controller {
   private var tabSafe: Bool { !(snapshot.map { Settings.tabUnsafeApps.contains($0.bundleID) } ?? false) }
   private var acceptKeyName: String { tabSafe ? "Tab" : "⌃Space" }
 
+  private func syncKeyState() {
+    tap.state = KeyTap.State(
+      active: snapshot != nil && preview == nil && !busy, hasGhost: !ghost.isEmpty, chipCount: chips.count,
+      tabSafe: tabSafe)
+  }
+
   private func render() {
+    syncKeyState()
     guard let s = snapshot, preview == nil else {
       overlay.hide()
       return
@@ -268,31 +290,18 @@ final class Controller {
 
   // MARK: - Keys
 
-  /// Runs synchronously inside the event tap. Returns true to swallow the key.
-  private func handle(_ event: KeyTap.Event) -> Bool {
-    guard preview == nil, !busy, snapshot != nil, !ghost.isEmpty || !chips.isEmpty else { return false }
-    guard let key = event.key, !event.command else { return false }
-    switch key {
-    case .escape:
-      dismiss()
-      return true
-    case .tab where tabSafe && !event.shift && !event.control && !event.option:
-      accept()
-      return true
-    case .space where !tabSafe && event.control:
-      accept()
-      return true
-    case .right where (event.control || event.option) && !ghost.isEmpty:
-      insertGhost(wordOnly: true)
-      return true
-    case .up, .down:
-      guard chips.count > 1 else { return false }
-      chosen = (chosen + (key == .down ? 1 : -1) + chips.count) % chips.count
+  /// Actions the key tap already decided to swallow, delivered on the main thread.
+  private func perform(_ action: KeyTap.Action) {
+    guard preview == nil, !busy, snapshot != nil else { return }
+    switch action {
+    case .dismiss: dismiss()
+    case .accept: accept()
+    case .ghostWord: insertGhost(wordOnly: true)
+    case .cycle(let step):
+      guard chips.count > 1 else { return }
+      chosen = (chosen + step + chips.count) % chips.count
       render()
       client.telemetry("cycle", eventID: eventID)
-      return true
-    default:
-      return false
     }
   }
 
@@ -326,7 +335,7 @@ final class Controller {
     guard let skill = chips[safe: chosen], let eventID else { return }
     busy = true
     clearSuggestions()
-    overlay.hide()
+    render()
     previousApp = NSWorkspace.shared.frontmostApplication
     Task {
       do {
@@ -337,6 +346,7 @@ final class Controller {
         previewPanel.showError(error.localizedDescription)
       }
       busy = false
+      syncKeyState()
     }
   }
 
@@ -345,6 +355,7 @@ final class Controller {
   private func show(_ execution: HelperClient.Execution) async {
     if execution.status == "preview" {
       preview = execution
+      syncKeyState()
       previewPanel.showPreview(execution, label: client.label(for: execution.skill))
       return
     }
@@ -390,6 +401,7 @@ final class Controller {
     let p = preview
     preview = nil
     slotAnswers = [:]
+    syncKeyState()
     previewPanel.orderOut(nil)
     if let id = p?.id, p?.status == "preview" { Task { await client.cancel(id: id) } }
     Task { await returnFocus() }

@@ -10,7 +10,10 @@ enum Settings {
 
   /// Bundle identifiers whose text is never read or sent.
   static var denyApps: [String] {
-    get { defaults.stringArray(forKey: "denyApps") ?? ["com.agilebits.onepassword7", "com.1password.1password", "com.apple.keychainaccess"] }
+    get { defaults.stringArray(forKey: "denyApps") ?? [
+        "com.agilebits.onepassword7", "com.1password.1password", "com.apple.keychainaccess",
+        "com.anthropic.claudefordesktop",
+      ] }
     set { defaults.set(newValue, forKey: "denyApps") }
   }
 

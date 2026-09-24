@@ -23,12 +23,15 @@ struct FocusSnapshot {
   /// Field frame in AppKit screen coordinates, used as a fallback anchor.
   let frame: CGRect?
 
-  /// Text before the caret, limited to the current paragraph and a sane length.
-  var buffer: String {
+  /// Windows captured before this read, newest last. In memory only.
+  let recent: [RecentWindow]
+
+  /// Text before the caret, limited to the current paragraph (or line) and a sane length.
+  func buffer(lineOnly: Bool) -> String {
     let utf16 = Array(text.utf16)
     let end = min(max(caret, 0), utf16.count)
     var slice = String(utf16CodeUnits: Array(utf16[0..<end]), count: end)
-    if let range = slice.range(of: "\n\n", options: .backwards) {
+    if let range = slice.range(of: lineOnly ? "\n" : "\n\n", options: .backwards) {
       slice = String(slice[range.upperBound...])
     }
     if slice.count > 2000 { slice = String(slice.suffix(2000)) }
@@ -120,22 +123,30 @@ final class AccessibilityReader {
 
   func focused() -> FocusSnapshot? {
     guard let raw = Self.attribute(systemWide, kAXFocusedUIElementAttribute) else { return nil }
-    let element = raw as! AXUIElement
+    var element = raw as! AXUIElement
     var pid: pid_t = 0
     AXUIElementGetPid(element, &pid)
     let running = NSRunningApplication(processIdentifier: pid)
     let bundleID = running?.bundleIdentifier ?? "pid.\(pid)"
     let appName = running?.localizedName ?? bundleID
 
-    let role = Self.string(element, kAXRoleAttribute) ?? ""
+    let appElement = AXUIElementCreateApplication(pid)
+    enableFullTree(appElement, pid: pid)
+    var role = Self.string(element, kAXRoleAttribute) ?? ""
+    if role == "AXWebArea",
+      let inner = Self.attribute(appElement, kAXFocusedUIElementAttribute).map({ $0 as! AXUIElement }),
+      !CFEqual(inner, element), let innerRole = Self.string(inner, kAXRoleAttribute), innerRole != "AXWebArea"
+    {
+      // Chromium first reports the page itself; once the full tree is on, the app knows the real field.
+      element = inner
+      role = innerRole
+    }
     let subrole = Self.string(element, kAXSubroleAttribute) ?? ""
     let secure = subrole == kAXSecureTextFieldSubrole || IsSecureEventInputEnabled()
     let selection = Self.range(element, kAXSelectedTextRangeAttribute)
     // Anything with a selected text range behaves like a text field for our purposes.
     guard Self.textRoles.contains(role) || selection != nil else { return nil }
 
-    let appElement = AXUIElementCreateApplication(pid)
-    enableFullTree(appElement, pid: pid)
     let window = Self.attribute(appElement, kAXFocusedWindowAttribute).map { $0 as! AXUIElement }
     let windowTitle = window.flatMap { Self.string($0, kAXTitleAttribute) } ?? ""
     captureWindowIfChanged(window, bundleID: bundleID, title: windowTitle)
@@ -143,7 +154,8 @@ final class AccessibilityReader {
     if secure {
       return FocusSnapshot(
         element: element, pid: pid, role: role, subrole: subrole, bundleID: bundleID, appName: appName,
-        windowTitle: windowTitle, text: "", caret: 0, selectionLength: 0, selectedText: "", secure: true, caretRect: nil, frame: nil)
+        windowTitle: windowTitle, text: "", caret: 0, selectionLength: 0, selectedText: "", secure: true,
+        caretRect: nil, frame: nil, recent: recent)
     }
 
     var text = Self.string(element, kAXValueAttribute) ?? ""
@@ -161,7 +173,7 @@ final class AccessibilityReader {
     return FocusSnapshot(
       element: element, pid: pid, role: role, subrole: subrole, bundleID: bundleID, appName: appName,
       windowTitle: windowTitle, text: text, caret: caret, selectionLength: selectionLength, selectedText: selectedText, secure: false,
-      caretRect: caretRect.map(Self.appKitRect), frame: Self.frame(element).map(Self.appKitRect))
+      caretRect: caretRect.map(Self.appKitRect), frame: Self.frame(element).map(Self.appKitRect), recent: recent)
   }
 
   /// Chromium and Electron apps expose a skeleton accessibility tree until an assistive client asks
