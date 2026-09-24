@@ -90,7 +90,8 @@ final class AccessibilityReader {
     let error = AXUIElementCopyParameterizedAttributeValue(
       element, kAXBoundsForRangeParameterizedAttribute as CFString, param, &value)
     guard error == .success, let rect = rect(value) else { return nil }
-    return rect.isEmpty && rect.origin == .zero ? nil : rect
+    // Chromium/Electron and Terminal answer with a zero-size rect on the screen edge; a real caret has height.
+    return rect.height < 1 ? nil : rect
   }
 
   /// Quartz (top-left origin) → AppKit (bottom-left origin) screen coordinates.

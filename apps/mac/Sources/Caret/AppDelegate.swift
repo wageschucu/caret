@@ -9,7 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var contextItem: NSMenuItem!
   private let statusWindow = StatusWindow()
 
+  private var menu: NSMenu!
+
   func applicationDidFinishLaunching(_ notification: Notification) {
+    installMainMenu()
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     if let image = NSImage(systemSymbolName: "arrow.up.right.circle.fill", accessibilityDescription: "Caret") {
       image.isTemplate = true
@@ -17,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } else {
       statusItem.button?.title = "↗"
     }
-    let menu = NSMenu()
+    menu = NSMenu()
     statusLine = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
     statusLine.isEnabled = false
     menu.addItem(statusLine)
@@ -46,6 +49,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.statusWindow.update(status: text, needsAttention: !ok)
     }
     controller.start()
+  }
+
+  /// The Dock menu mirrors the status-bar menu, for laptops whose notch hides the menu-bar icon.
+  func applicationDockMenu(_ sender: NSApplication) -> NSMenu? { menu }
+
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    statusWindow.update(status: statusLine.title, needsAttention: true)
+    return true
+  }
+
+  /// A regular app needs a main menu; the Edit menu makes Cmd-C/V/X/A work in the preview window.
+  private func installMainMenu() {
+    let main = NSMenu()
+    let appItem = NSMenuItem()
+    let appMenu = NSMenu()
+    appMenu.addItem(withTitle: "Quit Caret", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    appItem.submenu = appMenu
+    main.addItem(appItem)
+    let editItem = NSMenuItem()
+    let edit = NSMenu(title: "Edit")
+    edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+    edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+    edit.addItem(.separator())
+    edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+    edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+    edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+    editItem.submenu = edit
+    main.addItem(editItem)
+    NSApp.mainMenu = main
   }
 
   @objc private func togglePause() {

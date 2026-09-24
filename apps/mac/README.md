@@ -11,7 +11,7 @@ npm start                 # the helper, from the repository root
 apps/mac/build.sh --run   # builds build/Caret.app and launches it
 ```
 
-On first launch macOS asks for **Accessibility** permission (System Settings → Privacy & Security → Accessibility). Caret is inert until it is granted; the menu-bar item (↗) shows the current status.
+On first launch macOS asks for **Accessibility** permission (System Settings → Privacy & Security → Accessibility). Caret is inert until it is granted. The app shows a Dock icon (its menu mirrors the menu-bar one, since a notch can hide menu-bar icons) and a status window whenever it needs attention; clicking the Dock icon opens that window.
 
 ### Keeping the grant across rebuilds
 
