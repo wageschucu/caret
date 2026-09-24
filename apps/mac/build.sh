@@ -25,6 +25,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>MIT</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Caret adds events you confirm to your calendar, and removes them when you press Undo.</string>
 </dict>
 </plist>
 EOF

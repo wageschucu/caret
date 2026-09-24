@@ -25,7 +25,7 @@ Try:
 - `save notes as meeting.md: Review the design on Friday` → Tab → a new file with session undo.
 - `thank you` → ghost phrase → Ctrl+Right to accept a word, or Tab to accept the phrase.
 
-Calendar actions create records in **SkillRouter’s local calendar folder**. They do not connect to Google/Outlook calendars or send invitations. Web search returns a clickable search link; it does not claim to retrieve results.
+Calendar actions create records in **SkillRouter’s local calendar folder** in the browser host; the native macOS host creates them in your real calendar through EventKit (see [docs/host.md](docs/host.md)). No invitations are sent either way. Web search returns a clickable search link; it does not claim to retrieve results.
 
 ## Connect live models
 

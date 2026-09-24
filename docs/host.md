@@ -61,6 +61,10 @@ The helper trims, deduplicates, redacts, and caps this exactly as before.
 - Per-app Tab safety: terminals, IDEs and tab-navigated forms get Ctrl-Space as the accept key. The host keeps a small default list of bundle ids and a user override; the binding is printed on the chip.
 - IME composition (`kAXMarkedRange` non-empty) suppresses completion and routing until composition ends.
 
+## Host-executed tools
+
+Some effects belong to the host, not the helper: `calendar.create` is performed through EventKit so events land in the user's real calendar. The gate does not move. On Confirm the host sends `host_tools: ["calendar.create"]`; the helper validates and consumes the single-use confirmation exactly as before, logs it, and answers `status: "host_execute"` with the validated call instead of writing a local record. The host performs it and reports `POST /api/host-executed {id, ok, error}`; Undo deletes the event through EventKit and reports `{id, undone: true}`. A host that does not claim the tool gets the M1 local JSON record as before. Calendar access is requested on first use (`NSCalendarsFullAccessUsageDescription`).
+
 ## Known limitations
 
 - Apps with poor Accessibility support (some Electron apps, some web views, Java apps) may expose no value or no caret bounds. The host then degrades: buffer from typed keystrokes only, overlay anchored to the window, or nothing. It must never guess text it cannot read.

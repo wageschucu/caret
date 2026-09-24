@@ -19,6 +19,9 @@ final class Controller {
   private let overlay = OverlayPanel()
   private let previewPanel = PreviewPanel()
   private var client = HelperClient(base: Settings.helperURL)
+  private let calendar = CalendarBridge()
+  /// Host-side undo for the last calendar event created through EventKit.
+  private var calendarUndo: (helperID: String, eventID: String)?
 
   private var connected = false
   private var snapshot: FocusSnapshot?
@@ -368,6 +371,10 @@ final class Controller {
   // MARK: - Preview and execution
 
   private func show(_ execution: HelperClient.Execution) async {
+    if execution.status == "host_execute" {
+      await performHostTool(execution)
+      return
+    }
     if execution.status == "preview" {
       preview = execution
       syncKeyState()
@@ -383,8 +390,38 @@ final class Controller {
       AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: result, in: snapshot?.element)
       scheduleRefresh()
     } else {
+      calendarUndo = nil
       lastUndoID = execution.undoID
       previewPanel.showDone(execution)
+    }
+  }
+
+  /// The helper validated and consumed the confirmation; the host now performs the tool and reports.
+  private func performHostTool(_ execution: HelperClient.Execution) async {
+    preview = nil
+    syncKeyState()
+    guard let id = execution.id, let call = execution.calls.first, call["tool"] as? String == "calendar.create",
+      let args = call["args"] as? [String: Any], let title = args["title"] as? String,
+      let start = args["start"] as? String, let end = args["end"] as? String
+    else {
+      previewPanel.showError("The helper handed off an action this host cannot perform.")
+      return
+    }
+    do {
+      let created = try await calendar.create(title: title, start: start, end: end)
+      calendarUndo = (id, created.identifier)
+      lastUndoID = nil
+      try? await client.reportHostExecution(id: id, ok: true)
+      previewPanel.showDone(
+        HelperClient.Execution(
+          status: "done", id: id, skill: execution.skill, preview: nil, missingSlots: [], calls: [],
+          requiresConfirmation: false, demo: false,
+          result: "Added “\(title)” to your “\(created.calendar)” calendar. No invitations were sent.",
+          undoID: "host:" + created.identifier))
+    } catch {
+      Diagnostics.log("calendar.create failed: \(error.localizedDescription)")
+      try? await client.reportHostExecution(id: id, ok: false, error: error.localizedDescription)
+      previewPanel.showError(error.localizedDescription)
     }
   }
 
@@ -403,7 +440,7 @@ final class Controller {
             eventID: eventID, skill: p.skill, buffer: buffer, fields: slotAnswers, previous: id)
           await show(next)
         } else if let id = p.id {
-          await show(try await client.confirm(id: id))
+          await show(try await client.confirm(id: id, hostTools: ["calendar.create"]))
         }
       } catch {
         Diagnostics.log("preview submit failed: \(error.localizedDescription)")
@@ -427,6 +464,19 @@ final class Controller {
   private var lastUndoID: String?
 
   private func undo() {
+    if let pending = calendarUndo {
+      Task {
+        do {
+          try await calendar.delete(identifier: pending.eventID)
+          calendarUndo = nil
+          try? await client.reportHostExecution(id: pending.helperID, ok: true, undone: true)
+          previewPanel.showNotice("Undone. The event was removed from your calendar.")
+        } catch {
+          previewPanel.showError(error.localizedDescription)
+        }
+      }
+      return
+    }
     guard let id = lastUndoID else {
       previewPanel.showError("Nothing to undo.")
       return

@@ -109,3 +109,29 @@ test('windows reserved device names are rejected as filenames', () => {
     gate
   );
 });
+test('host-executed tools are gated, consumed once, and reported back', async (t) => {
+  const { exec, logs } = await setup(t);
+  const prepared = make('sends-or-pays', 'calendar.create', {
+    title: 'Review',
+    start: '2026-10-01T10:00:00Z',
+    end: '2026-10-01T11:00:00Z',
+  });
+  const preview = await exec.accept(prepared, 'route-1', 's1');
+  assert.equal(preview.status, 'preview');
+  const handoff = await exec.confirm(preview.id, 's1', ['calendar.create']);
+  assert.equal(handoff.status, 'host_execute');
+  assert.equal(handoff.call.tool, 'calendar.create');
+  await assert.rejects(exec.confirm(preview.id, 's1', ['calendar.create']));
+  await assert.rejects(exec.hostExecuted(handoff.id, 'other-session', { ok: true }));
+  assert.equal((await exec.hostExecuted(handoff.id, 's1', { ok: true })).status, 'done');
+  assert.equal((await exec.hostExecuted(handoff.id, 's1', { undone: true })).status, 'undone');
+  assert(logs.some((e) => e.host_executed && e.executed && !e.undone));
+  assert(logs.some((e) => e.host_executed && e.undone));
+  // A tool the host does not claim still runs locally.
+  const local = await exec.accept(
+    make('sends-or-pays', 'calendar.create', prepared.plan.calls[0].args),
+    'r2',
+    's1'
+  );
+  assert.equal((await exec.confirm(local.id, 's1', [])).status, 'done');
+});

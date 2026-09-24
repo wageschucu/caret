@@ -188,6 +188,7 @@ export class Executions {
     this.log = log;
     this.pending = new Map();
     this.undos = new Map();
+    this.handedOff = new Map();
   }
   prune() {
     for (const [id, item] of this.pending)
@@ -217,13 +218,42 @@ export class Executions {
       requires_confirmation: item.gate.confirm,
     };
   }
-  async confirm(id, session) {
+  /// `hostTools` names tools the calling host performs itself (e.g. calendar.create through EventKit).
+  /// The gate still runs here: the confirmation is validated and consumed exactly as for local tools,
+  /// and the host reports the outcome through `hostExecuted`.
+  async confirm(id, session, hostTools = []) {
     const item = this.pending.get(id);
     if (!item || item.session !== session || Date.now() - item.created > PREVIEW_TTL)
       throw Error('Preview expired. Accept the skill again.');
     if (item.plan.missing_slots.length) throw Error('Fill missing slots before confirming');
     this.pending.delete(id); // Consume before any I/O, including concurrent confirmations.
+    const call = item.plan.calls[0];
+    if (call && hostTools.includes(call.tool)) {
+      if (!item.gate.tools.includes(call.tool)) throw Error('Tool denied');
+      this.handedOff.set(item.id, item);
+      await this.record(item, { previewed: true, confirmed: true, executed: false, host_executed: true });
+      return { status: 'host_execute', id: item.id, skill: item.skill.slug, call, demo: !!item.plan.demo };
+    }
     return this.run(item, true, true);
+  }
+  async hostExecuted(id, session, { ok, error, undone = false }) {
+    const item = this.handedOff.get(id);
+    if (!item || item.session !== session) throw Error('Unknown host execution');
+    if (undone) {
+      this.handedOff.delete(id);
+      await this.record(item, { executed: true, undone: true, host_executed: true });
+      return { status: 'undone' };
+    }
+    if (!ok) this.handedOff.delete(id);
+    await this.record(item, {
+      previewed: true,
+      confirmed: true,
+      executed: !!ok,
+      undone: false,
+      host_executed: true,
+      error: ok ? undefined : String(error || 'host failed').slice(0, 300),
+    });
+    return { status: ok ? 'done' : 'failed', skill: item.skill.slug };
   }
   cancel(id, session) {
     const item = this.pending.get(id);

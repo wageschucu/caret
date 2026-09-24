@@ -153,7 +153,13 @@ final class HelperClient {
     return Self.execution(try await postJSON("prepare", body))
   }
 
-  func confirm(id: String) async throws -> Execution { Self.execution(try await postJSON("confirm", ["id": id])) }
+  /// `hostTools` are tools this host performs itself; the helper then returns status "host_execute".
+  func confirm(id: String, hostTools: [String] = []) async throws -> Execution {
+    Self.execution(try await postJSON("confirm", ["id": id, "host_tools": hostTools]))
+  }
+  func reportHostExecution(id: String, ok: Bool, error: String? = nil, undone: Bool = false) async throws {
+    _ = try await post("host-executed", ["id": id, "ok": ok, "error": error ?? NSNull(), "undone": undone])
+  }
   func cancel(id: String) async { _ = try? await post("cancel", ["id": id]) }
   func undo(id: String) async throws { _ = try await post("undo", ["id": id]) }
 

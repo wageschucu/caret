@@ -223,7 +223,14 @@ export async function createApp({
         return;
       }
       if (url.pathname === '/api/confirm') {
-        send(200, await executions.confirm(body.id, sessionId));
+        const hostTools = Array.isArray(body.host_tools)
+          ? body.host_tools.filter((t) => t === 'calendar.create')
+          : [];
+        send(200, await executions.confirm(body.id, sessionId, hostTools));
+        return;
+      }
+      if (url.pathname === '/api/host-executed') {
+        send(200, await executions.hostExecuted(body.id, sessionId, body));
         return;
       }
       if (url.pathname === '/api/cancel') {
