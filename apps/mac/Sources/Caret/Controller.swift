@@ -248,6 +248,7 @@ final class Controller {
         guard v == revision, !(error is CancellationError) else { return }
         chips = []
         render()
+        Diagnostics.log("route failed: \(error.localizedDescription)")
         onStatus("Router: \(error.localizedDescription)")
       }
     }
@@ -343,6 +344,7 @@ final class Controller {
           eventID: eventID, skill: skill, buffer: buffer, fields: [:], previous: nil)
         await show(execution)
       } catch {
+        Diagnostics.log("prepare failed for \(skill): \(error.localizedDescription)")
         previewPanel.showError(error.localizedDescription)
       }
       busy = false
@@ -391,6 +393,7 @@ final class Controller {
           await show(try await client.confirm(id: id))
         }
       } catch {
+        Diagnostics.log("preview submit failed: \(error.localizedDescription)")
         previewPanel.showError(error.localizedDescription)
         preview = nil
       }

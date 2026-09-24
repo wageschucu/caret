@@ -89,8 +89,14 @@ final class HelperClient {
     }
   }
 
+  /// POSTs, and when the helper has restarted (session unknown → 403) bootstraps again and retries once.
   private func post(_ endpoint: String, _ body: [String: Any]) async throws -> Data {
-    let (data, response) = try await session.data(for: try request(endpoint, body))
+    var (data, response) = try await session.data(for: try request(endpoint, body))
+    if (response as? HTTPURLResponse)?.statusCode == 403 {
+      Diagnostics.log("session rejected on /api/\(endpoint); re-bootstrapping")
+      _ = try await bootstrap()
+      (data, response) = try await session.data(for: try request(endpoint, body))
+    }
     try check(response, data)
     return data
   }
