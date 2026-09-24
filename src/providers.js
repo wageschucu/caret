@@ -1,4 +1,6 @@
 import { ABSTAIN } from './core.js';
+// Verified 2026-09-24 with a live key; the documented api.typesafe.ai/v1/systemone URL rejects keys (401).
+export const JEV_ENDPOINT = 'https://jevtypesafeai.com/api/v1/decide';
 export function jevRequest(state, skills, model = 'jev-1.13.0') {
   if (skills.length > 254) throw Error('Registry exceeds 254 active skills. Disable skills before routing.');
   return {
@@ -41,7 +43,7 @@ export function parseJev(response, skills) {
 export async function route(state, skills, { signal, fetcher = fetch, live = true } = {}) {
   if (!process.env.TYPESAFE_API_KEY || !live) return demoRoute(state, skills);
   const payload = jevRequest(state, skills, process.env.JEV_MODEL || 'jev-1.13.0');
-  const response = await fetcher('https://api.typesafe.ai/v1/systemone', {
+  const response = await fetcher(process.env.JEV_ENDPOINT || JEV_ENDPOINT, {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.TYPESAFE_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
