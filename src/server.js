@@ -55,6 +55,13 @@ export async function createApp({
   for (const p of problems) console.warn('Skill skipped: ' + p);
   const executions = new Executions(path.join(dataRoot, 'output'), log),
     sessions = new Map();
+  // A trigger counts only for what is being typed now: the match must end at the caret (trailing
+  // space or punctuation allowed), not somewhere earlier in the paragraph.
+  const triggerAtCaret = (trigger, buffer) => {
+    const tail = buffer.slice(-60),
+      end = tail.replace(/[\s.,;:!?)]+$/, '').length;
+    return [...tail.matchAll(new RegExp(trigger.source, 'gi'))].some((m) => m.index + m[0].length >= end);
+  };
   // Tools a native host may perform itself; anything else always runs here.
   const HOST_PERFORMABLE = ['calendar.create', 'url.open', 'mail.draft'];
   const hostToolsOf = (body) =>
@@ -186,7 +193,7 @@ export async function createApp({
         session.screens = state.screens;
         // Deterministic triggers: a skill's pattern matched, so offer it regardless of "ready".
         const triggered = registry.active
-          .filter((s) => s.trigger && s.trigger.test(state.buffer))
+          .filter((s) => s.trigger && triggerAtCaret(s.trigger, state.buffer))
           .map((s) => s.slug);
         if (triggered.length) {
           output = {
@@ -253,8 +260,15 @@ export async function createApp({
       }
       if (url.pathname === '/api/dismiss') {
         ++session.revision;
-        session.router.dismiss(String(body.buffer || ''));
-        await log({ type: 'interaction', routing_event_id: body.event_id, action: 'esc' });
+        const acted = Array.isArray(body.skills)
+          ? body.skills.filter((x) => typeof x === 'string').slice(0, 5)
+          : [];
+        session.router.dismiss(String(body.buffer || ''), acted);
+        await log({
+          type: 'interaction',
+          routing_event_id: body.event_id,
+          action: acted.length ? 'acted' : 'esc',
+        });
         send(200, { ok: true });
         return;
       }

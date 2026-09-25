@@ -563,6 +563,7 @@ final class Controller {
       previewPanel.orderOut(nil)
       await returnFocus()
       AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: result, in: snapshot)
+      actedOn(result, skill: execution.skill)
       scheduleRefresh()
     } else {
       calendarUndo = nil
@@ -613,6 +614,7 @@ final class Controller {
           previewPanel.orderOut(nil)
           await returnFocus()
           AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: body, in: snapshot)
+          actedOn(body, skill: execution.skill)
           scheduleRefresh()
         } else {
           var parts = URLComponents()
@@ -631,6 +633,14 @@ final class Controller {
       try? await client.reportHostExecution(id: id, ok: false, error: error.localizedDescription)
       previewPanel.showError(error.localizedDescription)
     }
+  }
+
+  /// The skill just rewrote the sentence: keep its chip away for the resulting text until the user
+  /// types something substantially new or ends the phrase. The new buffer is the result itself,
+  /// since the intent (the whole current paragraph before the caret) was replaced by it.
+  private func actedOn(_ result: String, skill: String) {
+    let id = eventID
+    Task { await client.dismiss(buffer: result, eventID: id, skills: [skill]) }
   }
 
   private func submitPreview(_ fields: [String: String]) {

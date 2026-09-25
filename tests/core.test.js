@@ -176,3 +176,14 @@ test('proposal appears after two consecutive actionable abstains on the same tho
   r.update(0.8, { a: 0.9, [ABSTAIN]: 0.1 }, 'book a table for two', 0); // a chip appears → reset
   assert.equal(r.proposal, false);
 });
+test('a skill that acted on the text stays suppressed until the text moves on', () => {
+  const r = new RouteSession();
+  const currency = { 'currency-converter': 0.9, [ABSTAIN]: 0.1 };
+  assert.deepEqual(r.update(0.9, currency, '250chf', 0), ['currency-converter']);
+  r.dismiss('301.83 USD', ['currency-converter']); // host: result inserted
+  assert.deepEqual(r.update(0.9, currency, '301.83 USD', 0), []);
+  assert.deepEqual(r.update(0.9, currency, '301.83 USD and', 0), []);
+  assert.deepEqual(r.update(0.9, currency, '301.83 USD and a lot more typed here', 0), [
+    'currency-converter',
+  ]);
+});

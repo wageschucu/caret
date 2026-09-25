@@ -1,49 +1,94 @@
-# Caret (SkillRouter)
+# Caret
 
-A local, keyboard-first implementation of the **M1 core loop** from [SKILLROUTER_v3.md](SKILLROUTER_v3.md): ghost text while you type, a calibrated action chip when intent is clear, Tab to accept, and a strict permission gate before anything runs. The original PDF is preserved. The Markdown conversion includes all 24 numbered sections, reconstructed tables, code samples, and an architecture diagram.
+Caret finishes your sentences and does the small things you were about to do. While you type in any Mac app, it shows the next phrase in grey. When it can tell what you want, it shows one action: translate, draft the reply, put it on the calendar, save the note. Tab takes it. Nothing runs until you have seen exactly what will happen and said yes.
 
-The concept — inline completion plus a nearby action, both accepted from the keyboard, with a typed judge deciding when to offer an action — is derived from [theodorexli/Caret](https://github.com/theodorexli/Caret) (MIT). This is a clean-room reimplementation in Node with a different architecture; no code is shared. See [docs/implementation.md](docs/implementation.md) for decisions and [docs/host.md](docs/host.md) for the native macOS host that makes it work in any application.
-
-**Current state:** the core (routing, thresholds, permission gate, executor, logs, eval) is complete and tested. The only host today is a browser typing field. The system-wide macOS host is the next milestone.
-
-## Run
-
-Requires Node.js 22 or newer.
+## Quick start (macOS 14+)
 
 ```sh
 npm install
-npm start
+apps/mac/build.sh --run
 ```
 
-Open **http://127.0.0.1:4317**. Without credentials, the app clearly identifies itself as a local demo. Demo routing uses simple rules and demo writing supports a few examples; it is not Jev or a general-purpose language model. Saving files and creating local calendar records are real local operations, even in demo mode.
+Grant Accessibility when asked. Then type in any app:
 
-Try:
+- `translate into Spanish: hello` → Tab → `Hola`
+- `schedule a design review tomorrow at 3` → Tab → preview → confirm → event in your calendar
+- `draft an email thanking the team` → Tab → draft opens in your mail client
+- `thank you` → ghost phrase appears → Tab accepts it, Ctrl+→ takes one word
 
-- `translate into Spanish: hello` → Tab → “Hola”.
-- `draft an email thanking the team for their help` → Tab → a demo draft.
-- `schedule a meeting tomorrow` → Tab → enter title and ISO start/end times → review → confirm.
-- `save notes as meeting.md: Review the design on Friday` → Tab → a new file with session undo.
-- `thank you` → ghost phrase → Ctrl+Right to accept a word, or Tab to accept the phrase.
+Out of the box Caret runs in demo mode with rule-based routing and a few canned results. See [Connect live models](#connect-live-models) to make it real.
 
-Calendar actions create records in **SkillRouter’s local calendar folder** in the browser host; the native macOS host creates them in your real calendar through EventKit (see [docs/host.md](docs/host.md)). No invitations are sent either way. Currency conversions use the ECB reference rate from api.frankfurter.app (only the amount and currency codes are sent). Web search opens the search in your browser (the native host) or shows a clickable link (browser host); it does not claim to retrieve results. Draft email opens a compose window in your mail client, or writes the draft in place when you are already composing in Mail.
+## What it does
+
+- **Completes** the phrase you are typing, inline, in grey. Accept it or keep typing.
+- **Offers one action** when it is confident about what you want. Never from what is on screen alone.
+- **Shows you first.** Anything that sends, pays, or writes shows the exact call and waits for a single confirmation. Files can be undone in the same session.
+- **Reads only what you allow.** The field you are in, your selection, and optionally the last few windows. Password fields and apps on your deny list are never read.
+
+## Skills
+
+| Say | Skill | What happens |
+| --- | --- | --- |
+| translate … into French | translate | Text inserted at the caret |
+| make this more professional | rewrite | Text inserted at the caret |
+| summarize what I was reading | summarize-selection | Uses your selection or the last window |
+| extract action items from that | extract-action-items | Bulleted list inserted |
+| draft a reply thanking Sam | draft-email | Compose window, or in place in your mail client |
+| schedule a meeting Friday 2pm | calendar-event | Event in your calendar via EventKit, no invitations |
+| 250 chf in usd | currency-converter | ECB rate from frankfurter.app; only the amount and codes are sent |
+| save these notes as todo.md | file-save | New file only, never overwrites, undo in session |
+| search for quiet keyboards | web-search | Opens the search in your browser |
+
+When Caret twice declines something it could have done, ⌘⇧N drafts a new skill for you to review.
 
 ## Connect live models
 
-Copy `.env.example` to `.env` and set:
+Real behavior comes from three model roles. Set them up in any order; each falls back to demo on its own when unset.
+
+| Role | What it does | Needs | Without it |
+| --- | --- | --- | --- |
+| Router | Decides whether to offer an action, and which | TypeSafe Jev key | Keyword rules, English only |
+| Executor | Writes the draft, translation, summary | Any OpenAI-compatible chat model | Canned examples for a few phrases |
+| Completer | Ghost text while you type | A small, fast local model | Fixed demo phrases |
+
+### 1. Local models (executor and completer)
+
+Install the [Ollama app](https://ollama.com/download) and pull one model for each role. Nothing is downloaded for you.
+
+```sh
+ollama pull llama3.2:1b    # completer, 1.3 GB, fast enough for ghost text
+ollama pull llama3.1:8b    # executor, 4.9 GB, 2 to 9 s per draft on an M2
+```
+
+Use the official app, not a Homebrew build, which may run CPU-only. Any other OpenAI-compatible endpoint works for the executor; set `LLM_API_KEY` too if it is hosted.
+
+### 2. Jev key (router)
+
+Get a TypeSafe API key. Without it Caret still runs but routes by keywords.
+
+### 3. Write `.env`
+
+```sh
+cp .env.example .env
+```
 
 ```dotenv
 TYPESAFE_API_KEY=your-key
-JEV_MODEL=jev-1.13.0
 LLM_BASE_URL=http://127.0.0.1:11434/v1
-LLM_MODEL=your-installed-model
-COMPLETER_MODEL=your-fast-installed-model
+LLM_MODEL=llama3.1:8b
+COMPLETER_MODEL=llama3.2:1b
+COMPLETER_BUDGET_MS=800      # spec target is 200; a 1B model on an M2 needs about 800
 ```
 
-`.env` is gitignored.
+`.env` is gitignored and read only by the helper. Credentials never reach the host app or a browser. Restart the helper after changing it: quit and relaunch Caret, or Ctrl+C and `npm start` again.
 
-`LLM_BASE_URL` must provide an OpenAI-compatible `/chat/completions` endpoint with streaming and JSON-object output support. For a hosted endpoint, also set `LLM_API_KEY`. These variables are read only by the helper; credentials never enter the browser. Restart after changing `.env` or skills. No models are downloaded or configured automatically.
+### 4. Check it took
 
-The completer streams a phrase, stops at punctuation or 30 tokens, and cancels at a 200 ms deadline. A cold or slow model may return no ghost text within that budget. Use a warm, fast model. No latency or live accuracy claim has been validated yet.
+Type a sentence in any app. Ghost text within a second means the completer is live. A chip on `translate into French: hello` means the router is live. Accepting it and getting `Bonjour` rather than a demo notice means the executor is live.
+
+If the router silently stays in demo mode, look for `Routing uses demo rules` in `~/Library/Logs/Caret/helper.log` or the terminal. A rejected key logs once and the session continues on rules. If the documented Jev endpoint returns 401, set `JEV_ENDPOINT` to the one your account uses.
+
+The first request to a cold Ollama model is slow. Type a throwaway sentence to warm it up.
 
 ## Controls
 
@@ -56,31 +101,50 @@ The completer streams a phrase, stops at punctuation or 30 tokens, and cancels a
 | Typing | Esc | Dismiss chips and ghost text |
 | Preview | Enter in card / second Tab | Confirm an action once all slots are filled |
 | Preview | Esc | Cancel and return to typing |
-| Host conflicts | Ctrl+Space | Alternate accept binding, selectable in context settings |
+| Terminals and IDEs | Ctrl+Space | Alternate accept binding, per app in Settings |
 
 If the OS reserves Ctrl+Right (for example for switching desktops), Alt+Right also accepts the next ghost word. Enter never accepts the first chip. Inputs using IME composition do not trigger completion or routing until composition ends.
 
 ## Privacy and permissions
 
-Screen context is supplied by the host, never fetched by the helper. The browser host has no access to other windows; its context settings support pasted focused-window text, selected text, an app deny list, and pause. The native macOS host reads the focused field, selection, and recent windows through the Accessibility API (see [docs/host.md](docs/host.md)). Screenpipe was removed on 2026-09-24: it is unnecessary once the host has Accessibility access, and its continuous recording is costly.
+Screen context is supplied by the host, never fetched by the helper. The native macOS host reads the focused field, selection, and recent windows through the Accessibility API (see [docs/host.md](docs/host.md)). The browser host has no access to other windows; its context settings support pasted focused-window text, selected text, an app deny list, and pause. Screenpipe was removed on 2026-09-24: it is unnecessary once the host has Accessibility access, and its continuous recording is costly.
 
-The helper trims/deduplicates context, removes common secret patterns, and caps serialized state at 4,000 UTF-8 bytes as a conservative token bound. A secure or denied host field returns empty state. Only a skill’s declared context reaches the executor. Screen text is labeled untrusted reference data.
+The helper trims/deduplicates context, removes common secret patterns, and caps serialized state at 4,000 UTF-8 bytes as a conservative token bound. A secure or denied host field returns empty state. Only a skill's declared context reaches the executor. Screen text is labeled untrusted reference data.
 
-The application, not the model, owns permissions. Tool effects cannot be downgraded by skill metadata. Sends/pays and destructive classes require an exact preview and a single-use confirmation. Reviewed skills force preview; untrusted skills cannot access side-effecting tools. Arbitrary scripts and shell commands are unavailable in this M1 build.
+The application, not the model, owns permissions. Tool effects cannot be downgraded by skill metadata. Sends/pays and destructive classes require an exact preview and a single-use confirmation. Reviewed skills force preview; untrusted skills cannot access side-effecting tools. Arbitrary scripts and shell commands are unavailable in this build.
 
 Local files are created exclusively without overwriting existing files. Undo only removes an unchanged result from the same session. The server binds to loopback and validates Host, Origin, JSON content type, and a per-session token. It is a local application, not an internet-facing service.
 
-## Skills and data
+---
 
-- `skills/<slug>/SKILL.md`: eight bundled skills. Override `metadata.active` with the string `"false"` to disable a skill, then restart. `metadata.label` is the name shown on the chip. A skill that fails validation is skipped and reported at startup and in the UI; it does not stop the helper.
+## About this project
+
+Caret is a local, keyboard-first implementation of the **M1 core loop** from [SKILLROUTER_v3.md](SKILLROUTER_v3.md): ghost text while you type, a calibrated action chip when intent is clear, Tab to accept, and a strict permission gate before anything runs. The original PDF is preserved. The Markdown conversion includes all 24 numbered sections, reconstructed tables, code samples, and an architecture diagram.
+
+The concept, inline completion plus a nearby action, both accepted from the keyboard, with a typed judge deciding when to offer an action, is derived from [theodorexli/Caret](https://github.com/theodorexli/Caret) (MIT). This is a clean-room reimplementation in Node with a different architecture; no code is shared. See [docs/implementation.md](docs/implementation.md) for decisions and [docs/host.md](docs/host.md) for the native macOS host.
+
+The Node helper owns routing, thresholds, the permission gate, the executor, logs, and eval. Hosts are thin clients of its loopback HTTP API. Two hosts exist: the Swift menu-bar app in [apps/mac](apps/mac/README.md), which works at the caret in any application, and a browser page used for development.
+
+### Browser dev host
+
+```sh
+npm start
+```
+
+Open http://127.0.0.1:4317. Same helper, same controls, but context is pasted by hand and calendar events are local JSON records under `.skillrouter/output/calendar/`. Use it for development and for the eval loop.
+
+### Skills and data
+
+- `skills/<slug>/SKILL.md`: nine bundled skills. Override `metadata.active` with the string `"false"` to disable a skill, then restart. `metadata.label` is the name shown on the chip. A skill that fails validation is skipped and reported at startup and in the UI; it does not stop the helper.
 - `.skillrouter/events.jsonl`: local redacted routing states, interaction events, and execution events. Rotated at 5 MB.
 - `.skillrouter/registries/`: full registry snapshots keyed by hash for historical reconstruction.
+- `.skillrouter/registry-history.jsonl`: every registry version, for rollback.
 - `.skillrouter/output/files/`: new local text files.
-- `.skillrouter/output/calendar/`: local event JSON records.
+- `.skillrouter/output/calendar/`: local event JSON records (browser host only).
 
 No telemetry sync or upload is implemented. Local logs contain redacted content, not just counters; treat them as personal data. A session and its undo handles end when the helper restarts. Existing outputs remain on disk.
 
-## Verify and evaluate
+### Verify and evaluate
 
 ```sh
 npm test
@@ -99,15 +163,20 @@ npm run eval -- --live --baseline eval/live-report.json --out eval/candidate-rep
 
 Live evaluation makes billable Jev requests. A baseline comparison exits unsuccessfully when false-route rate, missed-route rate, or wrong-route count increases. Baselines require an identical labeled dataset and evaluation mode. Edit descriptions only after comparing a candidate report; automatic editing is not enabled.
 
-Label your own routing events with `npm run label`: it walks the distinct sentences from `.skillrouter/events.jsonl` that are not yet in the dataset, proposes the accepted or offered skill, and appends each state with its recorded probabilities so `npm run eval` can replay it offline. States recorded under an older registry are skipped by the replay (`stale_skipped`) until `--live` re-evaluates them. You can also add hand-checked JSONL entries with `state`, `label` (a skill slug or `NO_ROUTE`), and `language`. A recorded routing event can also be copied and labeled; its probabilities replay offline when its registry hash matches. Registry/model/description changes require `--live` to obtain fresh probabilities. The report includes a confusion matrix, false and missed-route rates, abstention calibration bins, and per-language counts. Grow this set toward the spec’s 300+ real states.
+To grow the labeled set from your own use:
 
-## Implementation boundary
+1. `npm run label` walks the distinct sentences in `.skillrouter/events.jsonl` that are not yet in the dataset, proposes the accepted or offered skill, and appends each state with its recorded probabilities.
+2. `npm run eval` then replays those states offline. States recorded under an older registry are skipped (`stale_skipped`) until `--live` re-evaluates them; any registry, model, or description change needs `--live` for fresh probabilities.
+3. Hand-checked JSONL entries with `state`, `label` (a skill slug or `NO_ROUTE`), and `language` can be added directly.
 
-This is an M1 implementation and a usable local prototype. It does **not** implement the PDF’s M2/M3 proposal authoring, catalog adoption, script sandbox, rollback UI, multi-device sync, or voice input. Active registries over 254 skills fail explicitly rather than silently dropping options. See [implementation notes](docs/implementation.md) for API corrections and remaining validation.
+The report includes a confusion matrix, false and missed-route rates, abstention calibration bins, and per-language counts. Grow this set toward the spec's 300+ real states.
 
-## Roadmap
+### Implementation boundary
 
-1. **Native macOS host** ([docs/host.md](docs/host.md)): Accessibility API for context, a global event tap for Tab/Esc, a floating panel at the caret. The Node helper is unchanged; the host replaces `public/`.
-2. **Live-model validation**: measure the 200 ms ghost-text budget and routing accuracy with real models; grow the labeled eval set from recorded routing events.
-3. **M2**: ~~unknown-intent proposal~~ (done: ⌘⇧N after two actionable abstains drafts a SKILL.md, saved as *reviewed* and hot-reloaded; `.skillrouter/registry-history.jsonl` records every registry version), debug view, registry rollback.
-4. Other hosts share the helper: Windows (UI Automation), Linux (AT-SPI), phone (keyboard extension / share target).
+This is an M1 core plus the first M2 pieces, and a usable local prototype. It does **not** implement the PDF's catalog adoption, script sandbox, multi-device sync, or voice input. Active registries over 254 skills fail explicitly rather than silently dropping options. See [implementation notes](docs/implementation.md) for API corrections and remaining validation.
+
+### Done and next
+
+- Done: native macOS host; unknown-intent proposal (⌘⇧N, saved as *reviewed*, hot-reloaded); debug view with per-sentence probabilities; registry history and rollback.
+- Next: live-model validation, measuring the ghost-text budget and routing accuracy with real models and growing the labeled eval set from recorded events.
+- Later: other hosts sharing the same helper. Windows (UI Automation), Linux (AT-SPI), phone (keyboard extension or share target).

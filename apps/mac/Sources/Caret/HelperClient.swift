@@ -155,8 +155,8 @@ final class HelperClient {
     }
   }
 
-  func dismiss(buffer: String, eventID: String?) async {
-    _ = try? await post("dismiss", ["buffer": buffer, "event_id": eventID ?? NSNull()])
+  func dismiss(buffer: String, eventID: String?, skills: [String] = []) async {
+    _ = try? await post("dismiss", ["buffer": buffer, "event_id": eventID ?? NSNull(), "skills": skills])
   }
 
   func telemetry(_ action: String, eventID: String?, latencyMs: Double? = nil) {

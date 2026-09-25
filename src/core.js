@@ -131,8 +131,9 @@ export class RouteSession {
   // Spec §7.4: ready is high but the router abstains on two consecutive calls for the same buffer.
   abstainStreak = 0;
   abstainBuffer = '';
-  dismiss(buffer) {
-    for (const k of this.shown) this.suppressed.set(k, { buffer, boundary: this.boundary });
+  dismiss(buffer, skills = []) {
+    // Esc suppresses what was shown; a host also suppresses a skill that just acted on this text.
+    for (const k of [...this.shown, ...skills]) this.suppressed.set(k, { buffer, boundary: this.boundary });
     this.shown = [];
     this.abstainStreak = 0;
   }
