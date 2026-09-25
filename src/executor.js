@@ -350,7 +350,13 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
           parsed = { preview: r.text.trim().slice(0, 600), missing_slots: ['details'], calls: [] };
         }
       }
-      const requested = finalOnly ? [] : Array.isArray(parsed.lookups) ? parsed.lookups : [];
+      // A lookup tool placed in `calls` is still a lookup request, not an action.
+      const calls = Array.isArray(parsed.calls) ? parsed.calls : [];
+      const misplaced = calls.filter((c) => isLookup(c?.tool));
+      if (misplaced.length) parsed.calls = calls.filter((c) => !isLookup(c?.tool));
+      const requested = finalOnly
+        ? []
+        : [...(Array.isArray(parsed.lookups) ? parsed.lookups : []), ...misplaced];
       if (!requested.length || !lookupTools.length) {
         if (finalOnly && Array.isArray(parsed.lookups) && !parsed.calls)
           throw Error('Executor could not finish after its lookups');
