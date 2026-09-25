@@ -19,6 +19,12 @@ export const LOOKUPS = Object.freeze({
     describe:
       "busy periods in the user's calendar between two times, to pick a free slot when the requested time is vague (afternoon, next week)",
   },
+  'mail.search': {
+    where: 'host',
+    schema: '{"query": string}',
+    describe:
+      "recent inbox messages in the user's mail client whose sender or subject contains the query: from, date, subject and the beginning of the text of up to three messages; use it when the sentence refers to a message or a reply",
+  },
   'github.contributors': {
     where: 'helper',
     schema: '{"repo": "owner/name"}',
@@ -37,6 +43,8 @@ export function validateLookup(request, allowedTools) {
     throw Error(`Lookup not available: ${tool}`);
   if (tool === 'contacts.lookup' && !(typeof args.name === 'string' && args.name.trim()))
     throw Error('contacts.lookup needs a name');
+  if (tool === 'mail.search' && !(typeof args.query === 'string' && args.query.trim().length >= 2))
+    throw Error('mail.search needs a query');
   if (
     tool === 'calendar.freebusy' &&
     !(Number.isFinite(Date.parse(args.from)) && Number.isFinite(Date.parse(args.to)))

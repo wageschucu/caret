@@ -192,7 +192,9 @@ const describeTarget = (q) =>
     ? `contributors of ${q.args.repo}`
     : q.tool === 'calendar.freebusy'
       ? 'your calendar'
-      : q.args.name || q.tool;
+      : q.tool === 'mail.search'
+        ? `mail about “${q.args.query}”`
+        : q.args.name || q.tool;
 // A helper-side lookup may only target something the user named or was looking at.
 function lookupGrounded(q, context) {
   if (q.tool !== 'github.contributors') return true;

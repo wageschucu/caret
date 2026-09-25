@@ -180,6 +180,7 @@ export const HOST_TOOLS = Object.freeze({
   'contacts.lookup': { effect: 'preview-only' },
   'github.contributors': { effect: 'preview-only' },
   'calendar.freebusy': { effect: 'preview-only' },
+  'mail.search': { effect: 'preview-only' },
   // Opens a compose window with the draft; nothing is sent until the user does it.
   'mail.draft': { effect: 'reversible' },
 });

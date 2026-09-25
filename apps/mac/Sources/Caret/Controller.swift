@@ -33,6 +33,7 @@ final class Controller {
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
   private let contacts = ContactsBridge()
+  private let mail = MailBridge()
   let launcher = HelperLauncher()
   /// Host-side undo for the last calendar event created through EventKit.
   private var calendarUndo: (helperID: String, eventID: String)?
@@ -518,6 +519,12 @@ final class Controller {
             if tool == "contacts.lookup", let name = args["name"] as? String {
               let matches = await contacts.lookup([name])
               result = matches.isEmpty ? "No contacts match “\(name)”" : matches.joined(separator: "\n")
+            } else if tool == "mail.search", let query = args["query"] as? String {
+              do {
+                result = try await mail.search(query)
+              } catch {
+                result = "Mail search failed: \(error.localizedDescription)"
+              }
             } else if tool == "calendar.freebusy", let from = args["from"] as? String, let to = args["to"] as? String {
               do {
                 result = try await calendar.freeBusy(from: from, to: to)
