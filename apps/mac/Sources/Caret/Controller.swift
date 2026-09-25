@@ -469,6 +469,14 @@ final class Controller {
       return
     }
     guard let skill = chips[safe: chosen], let eventID else { return }
+    // Read the pill choices before the overlay state is cleared.
+    var fields: [String: String] = ["result_style": Settings.resultStyle]
+    if let slot = client.skill(skill)?.variant_slot, !slot.isEmpty, let choice = variants[safe: variantIndex] {
+      fields[slot] = choice
+    }
+    if let slot = client.skill(skill)?.style_slot, !slot.isEmpty, let choice = styles[safe: styleIndex] {
+      fields[slot] = choice.value
+    }
     busy = true
     clearSuggestions()
     working = client.label(for: skill) + "…"
@@ -476,13 +484,6 @@ final class Controller {
     previousApp = NSWorkspace.shared.frontmostApplication
     Task {
       do {
-        var fields: [String: String] = ["result_style": Settings.resultStyle]
-        if let slot = client.skill(skill)?.variant_slot, !slot.isEmpty, let choice = variants[safe: variantIndex] {
-          fields[slot] = choice
-        }
-        if let slot = client.skill(skill)?.style_slot, !slot.isEmpty, let choice = styles[safe: styleIndex] {
-          fields[slot] = choice.value
-        }
         // Skills that draft mail get the address-book matches for names in the sentence.
         if client.skill(skill)?.allowed_tools?.contains("mail.draft") == true {
           let matches = await contacts.lookup(ContactsBridge.names(in: buffer))
