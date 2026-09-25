@@ -5,6 +5,7 @@ final class OverlayPanel: NSPanel {
   private let ghostLabel = NSTextField(labelWithString: "")
   private let hintLabel = NSTextField(labelWithString: "")
   private let chipRow = NSStackView()
+  private let workingPill = WorkingPill()
   private let variantRow = NSStackView()
   private let styleRow = NSStackView()
   private let stack = NSStackView()
@@ -47,6 +48,8 @@ final class OverlayPanel: NSPanel {
     hintLabel.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
     hintLabel.layer?.cornerRadius = 4
     stack.addArrangedSubview(ghostLabel)
+    stack.addArrangedSubview(workingPill)
+    workingPill.isHidden = true
     stack.addArrangedSubview(chipRow)
     stack.addArrangedSubview(variantRow)
     stack.addArrangedSubview(styleRow)
@@ -68,9 +71,8 @@ final class OverlayPanel: NSPanel {
     hintLabel.isHidden = hint == nil || working != nil
     if let working {
       // A busy pill replaces ghost text and chips while the executor runs.
-      ghostLabel.stringValue = "⋯ " + working
-      ghostLabel.isHidden = false
-      ghostLabel.alphaValue = 1
+      ghostLabel.isHidden = true
+      workingPill.show(working)
       chipRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
       chipRow.isHidden = true
       variantRow.isHidden = true
@@ -78,6 +80,7 @@ final class OverlayPanel: NSPanel {
       place(at: anchor)
       return
     }
+    workingPill.hide()
     styleRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for v in styles { styleRow.addArrangedSubview(VariantPill(label: v.label, selected: v.selected, arrow: false)) }
     if !styles.isEmpty {
@@ -175,4 +178,52 @@ final class VariantPill: NSView {
     ])
   }
   required init?(coder: NSCoder) { nil }
+}
+
+/// "Working…" indicator shown at the caret while a skill runs: spinner plus the skill's name.
+final class WorkingPill: NSView {
+  private let spinner = NSProgressIndicator()
+  private let title = NSTextField(labelWithString: "")
+
+  init() {
+    super.init(frame: .zero)
+    wantsLayer = true
+    layer?.cornerRadius = 9
+    layer?.borderWidth = 1
+    layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor
+    layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
+    shadow = NSShadow()
+    shadow?.shadowBlurRadius = 6
+    shadow?.shadowOffset = NSSize(width: 0, height: -1)
+    shadow?.shadowColor = NSColor.black.withAlphaComponent(0.18)
+    spinner.style = .spinning
+    spinner.controlSize = .small
+    spinner.isIndeterminate = true
+    spinner.isDisplayedWhenStopped = false
+    title.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+    title.textColor = .labelColor
+    let row = NSStackView(views: [spinner, title])
+    row.orientation = .horizontal
+    row.spacing = 7
+    row.alignment = .centerY
+    row.edgeInsets = NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 11)
+    row.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(row)
+    NSLayoutConstraint.activate([
+      row.leadingAnchor.constraint(equalTo: leadingAnchor), row.trailingAnchor.constraint(equalTo: trailingAnchor),
+      row.topAnchor.constraint(equalTo: topAnchor), row.bottomAnchor.constraint(equalTo: bottomAnchor),
+    ])
+  }
+  required init?(coder: NSCoder) { nil }
+
+  func show(_ text: String) {
+    title.stringValue = text
+    isHidden = false
+    spinner.startAnimation(nil)
+  }
+
+  func hide() {
+    spinner.stopAnimation(nil)
+    isHidden = true
+  }
 }
