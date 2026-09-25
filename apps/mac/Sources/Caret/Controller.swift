@@ -28,6 +28,11 @@ final class Controller {
   let launcher = HelperLauncher()
   /// Host-side undo for the last calendar event created through EventKit.
   private var calendarUndo: (helperID: String, eventID: String)?
+  /// When composing in one of these, a draft replaces the typed instruction instead of opening a new window.
+  private static let mailClients: Set<String> = [
+    "com.apple.mail", "org.mozilla.thunderbird", "com.microsoft.Outlook", "com.readdle.smartemail-Mac",
+    "com.airmail.airmail", "com.superhuman.electron",
+  ]
 
   private var connected = false
   private var snapshot: FocusSnapshot?
@@ -465,7 +470,7 @@ final class Controller {
           throw CalendarBridge.BridgeError(message: "Incomplete mail draft.")
         }
         let to = (args["to"] as? String) ?? ""
-        if snapshot?.bundleID == "com.apple.mail" {
+        if let app = snapshot?.bundleID, Self.mailClients.contains(app) {
           // Already composing: the draft body replaces the typed instruction in place.
           previewPanel.orderOut(nil)
           await returnFocus()
