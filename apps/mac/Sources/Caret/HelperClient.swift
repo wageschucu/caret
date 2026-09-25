@@ -10,6 +10,12 @@ final class HelperClient {
     let active: Bool
     let variants: [String]?
     let variant_slot: String?
+    let styles: [StyleOption]?
+    let style_slot: String?
+  }
+  struct StyleOption: Decodable {
+    let value: String
+    let label: String
   }
   struct Bootstrap: Decodable {
     let token: String

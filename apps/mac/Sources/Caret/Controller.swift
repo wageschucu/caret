@@ -28,6 +28,8 @@ final class Controller {
   private var canPropose = false
   private var variants: [String] = []
   private var variantIndex = 0
+  private var styles: [HelperClient.StyleOption] = []
+  private var styleIndex = 0
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
   let launcher = HelperLauncher()
@@ -343,6 +345,8 @@ final class Controller {
     canPropose = false
     variants = []
     variantIndex = 0
+    styles = []
+    styleIndex = 0
   }
 
   /// Destination options for the highlighted chip: the one named in the sentence first, then the
@@ -350,6 +354,13 @@ final class Controller {
   private func updateVariants() {
     variants = []
     variantIndex = 0
+    styles = []
+    styleIndex = 0
+    if let slug = chips[safe: chosen], let options = client.skill(slug)?.styles, options.count > 1 {
+      styles = options
+      // The Settings value is the default selection; the pill choice applies to this accept only.
+      styleIndex = options.firstIndex { $0.value == Settings.resultStyle } ?? 0
+    }
     guard let slug = chips[safe: chosen], let skill = client.skill(slug), let all = skill.variants, all.count > 1
     else { return }
     let lower = buffer.lowercased()
@@ -379,7 +390,7 @@ final class Controller {
   private func syncKeyState() {
     tap.state = KeyTap.State(
       active: snapshot != nil && preview == nil && !busy, hasGhost: !ghost.isEmpty, chipCount: chips.count,
-      tabSafe: tabSafe, canPropose: canPropose, variantCount: variants.count)
+      tabSafe: tabSafe, canPropose: canPropose, variantCount: variants.count, styleCount: styles.count)
   }
 
   private func render() {
@@ -398,7 +409,8 @@ final class Controller {
       chips: chips.enumerated().map { (label: client.label(for: $0.element), selected: $0.offset == chosen) },
       acceptKey: acceptKeyName, anchor: anchor, working: working,
       hint: canPropose ? "⌘⇧N  create a skill for this?" : nil,
-      variants: variants.enumerated().map { (label: $0.element, selected: $0.offset == variantIndex) })
+      variants: variants.enumerated().map { (label: $0.element, selected: $0.offset == variantIndex) },
+      styles: styles.enumerated().map { (label: $0.element.label, selected: $0.offset == styleIndex) })
   }
 
   // MARK: - Keys
@@ -414,6 +426,10 @@ final class Controller {
     case .variant(let step):
       guard variants.count > 1 else { return }
       variantIndex = (variantIndex + step + variants.count) % variants.count
+      render()
+    case .style(let step):
+      guard styles.count > 1 else { return }
+      styleIndex = (styleIndex + step + styles.count) % styles.count
       render()
     case .cycle(let step):
       guard chips.count > 1 else { return }
@@ -462,6 +478,9 @@ final class Controller {
         var fields: [String: String] = ["result_style": Settings.resultStyle]
         if let slot = client.skill(skill)?.variant_slot, !slot.isEmpty, let choice = variants[safe: variantIndex] {
           fields[slot] = choice
+        }
+        if let slot = client.skill(skill)?.style_slot, !slot.isEmpty, let choice = styles[safe: styleIndex] {
+          fields[slot] = choice.value
         }
         slotAnswers = fields
         let execution = try await client.prepare(

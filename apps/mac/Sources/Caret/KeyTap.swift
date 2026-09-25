@@ -23,9 +23,10 @@ final class KeyTap {
     var tabSafe = true
     var canPropose = false
     var variantCount = 0  // destination options under the highlighted chip
+    var styleCount = 0  // second option row (⌥← ⌥→)
   }
   enum Action {
-    case accept, dismiss, ghostWord, cycle(Int), propose, variant(Int)
+    case accept, dismiss, ghostWord, cycle(Int), propose, variant(Int), style(Int)
   }
 
   var onAction: (Action) -> Void = { _ in }
@@ -60,6 +61,8 @@ final class KeyTap {
     case .escape: return .dismiss
     case .tab where s.tabSafe && !e.shift && !e.control && !e.option: return .accept
     case .space where !s.tabSafe && e.control: return .accept
+    case .right where e.option && !e.control && s.styleCount > 1: return .style(1)
+    case .left where e.option && !e.control && s.styleCount > 1: return .style(-1)
     case .right where (e.control || e.option) && s.hasGhost: return .ghostWord
     case .right where s.variantCount > 1 && !e.control && !e.option && !e.shift: return .variant(1)
     case .left where s.variantCount > 1 && !e.control && !e.option && !e.shift: return .variant(-1)

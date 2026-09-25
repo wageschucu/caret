@@ -99,7 +99,7 @@ export async function createApp({
           warning: jevAuthError,
           problems,
           skills: registry.skills.map(
-            ({ slug, label, description, side_effect_class, context, active, variants, variant_slot }) => ({
+            ({
               slug,
               label,
               description,
@@ -108,6 +108,19 @@ export async function createApp({
               active,
               variants,
               variant_slot,
+              styles,
+              style_slot,
+            }) => ({
+              slug,
+              label,
+              description,
+              side_effect_class,
+              context,
+              active,
+              variants,
+              variant_slot,
+              styles,
+              style_slot,
             })
           ),
         });

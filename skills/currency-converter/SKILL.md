@@ -12,6 +12,8 @@ metadata:
   context: "buffer,selection,recent-screens"
   variants: "CHF|USD|EUR|GBP|JPY|CAD|AUD"
   variant_slot: "to"
+  styles: "compact=value only|verbose=with rate"
+  style_slot: "result_style"
   trigger: "\\b\\d[\\d,]*(?:\\.\\d+)?\\s?(?:chf|usd|eur|gbp|jpy|cad|aud)\\b|[$€£¥]\\s?\\d"
   trust: "trusted"
 ---

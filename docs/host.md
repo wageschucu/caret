@@ -67,7 +67,7 @@ Some effects belong to the host, not the helper: `calendar.create` is performed 
 
 ## Variants (destination options)
 
-A skill may declare `metadata.variants: "A|B|C"` and `metadata.variant_slot: "<slot>"`. While its chip is highlighted the overlay shows the options as pills; ← / → cycles them and Tab accepts chip + option, which the host sends as a slot answer. The host orders options: the one named in the sentence, then the user's profile preferences (home currencies), then the rest, leaving out the source named in the sentence. First use: `currency-converter` with destination currencies; the helper's `fx.convert` tool fetches the ECB reference rate (Frankfurter) so the model never invents a rate, and `currencyHints` parses amount/source/destination deterministically.
+A skill may declare `metadata.variants: "A|B|C"` and `metadata.variant_slot: "<slot>"`. While its chip is highlighted the overlay shows the options as pills; ← / → cycles them and Tab accepts chip + option, which the host sends as a slot answer. The host orders options: the one named in the sentence, then the user's profile preferences (home currencies), then the rest, leaving out the source named in the sentence. A second row, `metadata.styles: "value=Label|value=Label"` with `style_slot`, is cycled with ⌥← / ⌥→ and defaults to the Settings value (currency: value only / with rate). First use: `currency-converter` with destination currencies; the helper's `fx.convert` tool fetches the ECB reference rate (Frankfurter) so the model never invents a rate, and `currencyHints` parses amount/source/destination deterministically.
 
 ## Triggers
 

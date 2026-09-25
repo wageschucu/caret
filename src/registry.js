@@ -64,6 +64,16 @@ export function parseSkill(raw, name, file = '') {
         .map((v) => v.trim())
         .filter(Boolean),
       variant_slot: m.variant_slot || '',
+      // Optional second row of options, "value=Label|value=Label", e.g. result styles.
+      styles: (m.styles || '')
+        .split('|')
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .map((v) => {
+          const [value, label] = v.split('=');
+          return { value: value.trim(), label: (label || value).trim() };
+        }),
+      style_slot: m.style_slot || '',
       // Optional: a pattern that forces the chip even when the router's "ready" is low (bare amounts).
       trigger: m.trigger ? new RegExp(m.trigger, 'i') : null,
       digest: hash(raw),
