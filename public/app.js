@@ -25,8 +25,15 @@ async function api(endpoint, body = {}, signal) {
     body: JSON.stringify(body),
     signal,
   });
-  const data = await r.json();
-  if (!r.ok) throw Error(data.error || 'Request failed');
+  // Planning streams progress lines (NDJSON) before its final object; other endpoints answer once.
+  const text = await r.text();
+  const lines = text
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  for (const line of lines) if (line.progress) notice(line.progress + '…');
+  const data = lines.at(-1) || {};
+  if (!r.ok || data.error) throw Error(data.error || 'Request failed');
   return data;
 }
 function notice(text = '') {

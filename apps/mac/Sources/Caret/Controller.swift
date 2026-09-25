@@ -490,8 +490,15 @@ final class Controller {
           if !matches.isEmpty { fields["contacts"] = matches.joined(separator: "\n") }
         }
         slotAnswers = fields
+        let label = client.label(for: skill)
+        let progress: (String) -> Void = { [weak self] text in
+          Task { @MainActor in
+            self?.working = "\(label): \(text)…"
+            self?.render()
+          }
+        }
         var execution = try await client.prepare(
-          eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil)
+          eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil, onProgress: progress)
         // The executor may ask for host-side lookups (Contacts) before it can plan; answer and resume.
         var rounds = 0
         while execution.status == "needs", rounds < 3 {
@@ -509,7 +516,8 @@ final class Controller {
           working = client.label(for: skill) + "… (looking up)"
           render()
           execution = try await client.prepare(
-            eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil, lookups: lookups)
+            eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil, lookups: lookups,
+            onProgress: progress)
         }
         await show(execution)
       } catch {

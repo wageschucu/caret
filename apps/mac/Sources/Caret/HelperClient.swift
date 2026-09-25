@@ -174,16 +174,35 @@ final class HelperClient {
   /// Tools this host performs itself; the helper hands them over after running its gate.
   static let hostTools = ["calendar.create", "url.open", "mail.draft"]
 
+  /// Streams planning progress lines (`onProgress`) and returns the final object.
   func prepare(
     eventID: String, skill: String, buffer: String, fields: [String: String], previous: String?,
-    lookups: [[String: Any]] = []
+    lookups: [[String: Any]] = [], onProgress: @escaping (String) -> Void = { _ in }
   ) async throws -> Execution {
     var body: [String: Any] = [
       "event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields, "host_tools": Self.hostTools,
       "profile": Settings.profile, "lookups": lookups,
     ]
     if let previous { body["previous_preview"] = previous }
-    return Self.execution(try await postJSON("prepare", body))
+    var (bytes, response) = try await session.bytes(for: try request("prepare", body))
+    if (response as? HTTPURLResponse)?.statusCode == 403 {
+      _ = try await bootstrap()
+      (bytes, response) = try await session.bytes(for: try request("prepare", body))
+    }
+    guard let http = response as? HTTPURLResponse else { throw HelperError(message: "No response from helper") }
+    var final: [String: Any]? = nil
+    for try await line in bytes.lines {
+      guard let data = line.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else { continue }
+      if let text = obj["progress"] as? String {
+        onProgress(text)
+      } else {
+        final = obj
+      }
+    }
+    guard let final else { throw HelperError(message: http.statusCode >= 400 ? "Helper error \(http.statusCode)" : "Empty reply") }
+    if let message = final["error"] as? String { throw HelperError(message: message) }
+    return Self.execution(final)
   }
 
   /// `hostTools` are tools this host performs itself; the helper then returns status "host_execute".

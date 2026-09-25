@@ -169,6 +169,21 @@ function demoPlan(skill, context, fields, profile = {}) {
     demo: true,
   };
 }
+const describeTarget = (q) =>
+  q.tool === 'github.contributors' ? `contributors of ${q.args.repo}` : q.args.name || q.tool;
+// A helper-side lookup may only target something the user named or was looking at.
+function lookupGrounded(q, context) {
+  if (q.tool !== 'github.contributors') return true;
+  const repo = String(q.args.repo).toLowerCase();
+  const seen = [
+    context.buffer || '',
+    ...(context['recent-screens']?.screens || []).map((x) => `${x.url || ''} ${x.text || ''}`),
+  ]
+    .join('\n')
+    .toLowerCase();
+  return seen.includes(repo);
+}
+
 // The typed text is presented plainly and first: local models treat a JSON-wrapped buffer as opaque
 // data and then report slots as missing that are stated right there in the sentence.
 function executorPrompt(skill, gate, profile = {}, lookupTools = []) {
@@ -277,7 +292,8 @@ export function currencyHints(buffer, fields = {}, profile = {}) {
 }
 
 /// `lookups` are results already obtained (helper- or host-side) for this accept, in order.
-export async function prepare(skill, state, fields = {}, profile = {}, lookups = []) {
+/// `progress(text)` reports planning stages to the caller (streamed to the host).
+export async function prepare(skill, state, fields = {}, profile = {}, lookups = [], progress = () => {}) {
   const gate = permission(skill),
     context = forwardContext(skill, state);
   const lookupTools = gate.tools.filter(isLookup);
@@ -300,6 +316,13 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
     // ones are returned as "needs" for the host to answer before planning resumes.
     let finalOnly = false;
     for (let round = 0; ; round++) {
+      progress(
+        round === 0
+          ? 'Reading the request'
+          : finalOnly
+            ? 'Writing the result'
+            : 'Deciding what else is needed'
+      );
       const r = await chat(
         [
           { role: 'system', content: executorPrompt(skill, gate, profile, lookupTools) },
@@ -337,13 +360,20 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
       const hostSide = pending.filter((q) => LOOKUPS[q.tool].where === 'host');
       for (const q of pending.filter((x) => LOOKUPS[x.tool].where === 'helper')) {
         let result;
-        try {
-          result = await runLookup(q);
-        } catch (e) {
-          result = `Lookup failed: ${e.message}`;
+        if (!lookupGrounded(q, context)) {
+          // Like recipients: a lookup target must come from the sentence or the pages the user saw.
+          result = `Lookup refused: ${describeTarget(q)} is not in the sentence or in the pages you were viewing.`;
+        } else {
+          progress(`Looking up ${describeTarget(q)}`);
+          try {
+            result = await runLookup(q);
+          } catch (e) {
+            result = `Lookup failed: ${e.message}`;
+          }
         }
         lookups.push({ ...q, result: String(result).slice(0, 6000) });
       }
+      if (hostSide.length) progress(`Asking Contacts about ${hostSide.map((q) => q.args.name).join(', ')}`);
       if (hostSide.length) return { skill, gate, context, needs: hostSide, lookups };
     }
   }

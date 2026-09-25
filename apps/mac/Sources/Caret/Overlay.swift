@@ -221,10 +221,8 @@ final class WorkingPill: NSView {
   private var base = ""
 
   func show(_ text: String) {
-    if isHidden || base != text {
-      started = Date()
-      base = text
-    }
+    if isHidden { started = Date() }  // the stage text may change; the clock keeps running
+    base = text
     isHidden = false
     spinner.startAnimation(nil)
     ticker?.invalidate()

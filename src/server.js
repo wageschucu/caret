@@ -306,23 +306,29 @@ export async function createApp({
           .filter((l) => l && typeof l.tool === 'string' && l.args && typeof l.args === 'object')
           .slice(0, 3)
           .map((l) => ({ tool: l.tool, args: l.args, result: String(l.result ?? '').slice(0, 6000) }));
-        const prepared = await prepare(skill, acceptedState, body.fields || {}, profile, lookups);
-        if (prepared.needs) {
-          await log({
-            type: 'interaction',
-            routing_event_id: event.id,
-            action: 'lookup',
-            lookups: prepared.needs.map((n) => n.tool),
-          });
-          send(200, {
-            status: 'needs',
-            skill: skill.slug,
-            lookups: prepared.needs,
-            obtained: prepared.lookups,
-          });
-          return;
+        // Streamed: progress lines while planning, then exactly one final object.
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
+        const emit = (obj) => res.write(JSON.stringify(obj) + '\n');
+        try {
+          const prepared = await prepare(skill, acceptedState, body.fields || {}, profile, lookups, (text) =>
+            emit({ progress: text })
+          );
+          if (prepared.needs) {
+            await log({
+              type: 'interaction',
+              routing_event_id: event.id,
+              action: 'lookup',
+              lookups: prepared.needs.map((n) => n.tool),
+            });
+            emit({ status: 'needs', skill: skill.slug, lookups: prepared.needs, obtained: prepared.lookups });
+          } else {
+            emit(await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
+          }
+        } catch (e) {
+          emit({ error: redact(e.message) });
         }
-        send(200, await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
+        res.end();
+        return;
         return;
       }
       if (url.pathname === '/api/debug') {
