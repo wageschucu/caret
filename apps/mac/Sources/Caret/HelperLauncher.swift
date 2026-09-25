@@ -29,7 +29,16 @@ final class HelperLauncher {
     p.standardError = handle
     p.terminationHandler = { [weak self] proc in
       Diagnostics.log("helper exited with status \(proc.terminationStatus)")
-      Task { @MainActor in self?.process = nil }
+      Task { @MainActor in
+        guard let self else { return }
+        self.process = nil
+        // A helper this app started is brought back unless the app itself is stopping it.
+        if !self.stopping {
+          try? await Task.sleep(for: .seconds(1))
+          self.attempted = false
+          if self.start() { Diagnostics.log("helper restarted after exit") }
+        }
+      }
     }
     do {
       try p.run()
@@ -49,7 +58,10 @@ final class HelperLauncher {
   }
 
   /// Stops a helper this app started; one started by the user is left alone.
+  private var stopping = false
+
   func stop() {
+    stopping = true
     process?.terminate()
     process = nil
   }
