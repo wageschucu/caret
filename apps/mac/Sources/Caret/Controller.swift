@@ -124,6 +124,16 @@ final class Controller {
     if connected { Task { await connect() } } else { status("Accessibility granted · waiting for helper", attention: true) }
   }
 
+  /// The helper address changed in Settings: drop the session and connect to the new one.
+  func reconnect() {
+    client = HelperClient(base: Settings.helperURL)
+    connected = false
+    launcher.reset()
+    clearSuggestions()
+    render()
+    Task { await connect() }
+  }
+
   func pausedChanged() {
     clearSuggestions()
     overlay.hide()

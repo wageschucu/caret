@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var contextItem: NSMenuItem!
   private var loginItem: NSMenuItem!
   private let statusWindow = StatusWindow()
+  private let settingsWindow = SettingsWindow()
 
   private var menu: NSMenu!
 
@@ -35,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     loginItem = NSMenuItem(title: "Launch Caret at login", action: #selector(toggleLogin), keyEquivalent: "")
     loginItem.target = self
     menu.addItem(loginItem)
+    menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
     menu.addItem(.separator())
     menu.addItem(withTitle: "Copy last state (debug)", action: #selector(copyState), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Diagnose focused field in 5 s (debug)", action: #selector(diagnose), keyEquivalent: "").target = self
@@ -47,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     statusItem.menu = menu
 
     statusWindow.onOpenSettings = { [weak self] in self?.openAccessibility() }
+    settingsWindow.onHelperURLChanged = { [weak self] in self?.controller.reconnect() }
     statusWindow.onQuit = { NSApp.terminate(nil) }
     controller.onStatus = { [weak self] text, attention in
       self?.statusLine.title = text
@@ -68,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let main = NSMenu()
     let appItem = NSMenuItem()
     let appMenu = NSMenu()
+    appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+    appMenu.addItem(.separator())
     appMenu.addItem(withTitle: "Quit Caret", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     appItem.submenu = appMenu
     main.addItem(appItem)
@@ -90,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     controller.pausedChanged()
   }
   @objc private func toggleContext() { Settings.screenContext.toggle() }
+  @objc private func openSettings() { settingsWindow.present() }
   @objc private func toggleLogin() {
     do {
       try HelperLauncher.setLaunchAtLogin(!HelperLauncher.launchesAtLogin)

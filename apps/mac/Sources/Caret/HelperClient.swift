@@ -153,6 +153,7 @@ final class HelperClient {
   {
     var body: [String: Any] = [
       "event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields, "host_tools": Self.hostTools,
+      "profile": Settings.profile,
     ]
     if let previous { body["previous_preview"] = previous }
     return Self.execution(try await postJSON("prepare", body))

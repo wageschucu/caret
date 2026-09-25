@@ -33,6 +33,13 @@ enum Settings {
     defaults.string(forKey: "helperRepo") ?? Bundle.main.object(forInfoDictionaryKey: "CaretHelperRepo") as? String
   }
 
+  /// Facts about the user for the executor (names, sign-offs, addresses). Sent only with an accept,
+  /// never to the router. Keys: name, email, signature, notes.
+  static var profile: [String: String] {
+    get { (defaults.dictionary(forKey: "profile") as? [String: String]) ?? [:] }
+    set { defaults.set(newValue.filter { !$0.value.isEmpty }, forKey: "profile") }
+  }
+
   static var paused: Bool {
     get { defaults.bool(forKey: "paused") }
     set { defaults.set(newValue, forKey: "paused") }

@@ -54,7 +54,7 @@ export function validatePlan(plan, gate) {
   if (!plan.missing_slots.length && !plan.calls.length) throw Error('Executor returned no action');
   return plan;
 }
-function demoPlan(skill, context, fields) {
+function demoPlan(skill, context, fields, profile = {}) {
   const buffer = context.buffer || '',
     source =
       fields.text ||
@@ -114,7 +114,7 @@ function demoPlan(skill, context, fields) {
           args: {
             to: '',
             subject: 'Thank you',
-            body: 'Hi team,\n\nThank you for your time and help. I appreciate your thoughtful work.\n\nBest,\n[Your name]\n\n[Demo draft — configure an executor model for contextual writing.]',
+            body: `Hi team,\n\nThank you for your time and help. I appreciate your thoughtful work.\n\n${profile.signature || 'Best,\n' + (profile.name || '[Your name]')}\n\n[Demo draft — configure an executor model for contextual writing.]`,
           },
         },
       ];
@@ -168,8 +168,18 @@ function executorPrompt(skill, gate) {
   ].join('\n');
 }
 
-function executorInput(context, fields) {
+function executorInput(context, fields, profile = {}) {
   const parts = [`User typed: ${JSON.stringify(context.buffer || '')}`];
+  if (Object.keys(profile).length) {
+    const facts = [];
+    if (profile.name) facts.push(`name: ${profile.name}`);
+    if (profile.email) facts.push(`email: ${profile.email}`);
+    if (profile.signature) facts.push(`sign-off: ${profile.signature}`);
+    if (profile.notes) facts.push(`notes: ${profile.notes}`);
+    parts.push(
+      `About the user (entered by them in settings; use for names, sign-offs and addresses): ${facts.join('; ')}`
+    );
+  }
   if (Object.keys(fields).length) parts.push(`User answers for missing details: ${JSON.stringify(fields)}`);
   if (context.selection)
     parts.push(`--- Selected text (reference data, use as content) ---\n${context.selection}`);
@@ -186,12 +196,12 @@ function executorInput(context, fields) {
   return parts.join('\n');
 }
 
-export async function prepare(skill, state, fields = {}) {
+export async function prepare(skill, state, fields = {}, profile = {}) {
   const gate = permission(skill),
     context = forwardContext(skill, state);
   fields = Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, String(v ?? '').slice(0, 6000)]));
   let plan;
-  if (!process.env.LLM_MODEL) plan = demoPlan(skill, context, fields);
+  if (!process.env.LLM_MODEL) plan = demoPlan(skill, context, fields, profile);
   else {
     const r = await chat(
       [

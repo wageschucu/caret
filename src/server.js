@@ -222,7 +222,16 @@ export async function createApp({
           state: acceptedState,
           state_hash: hash(acceptedState),
         });
-        const prepared = await prepare(skill, acceptedState, body.fields || {});
+        // Facts the user entered about themselves; used by the executor only, never logged or routed.
+        const profile = Object.fromEntries(
+          Object.entries(body.profile || {})
+            .filter(
+              ([k, v]) =>
+                ['name', 'email', 'signature', 'notes'].includes(k) && typeof v === 'string' && v.trim()
+            )
+            .map(([k, v]) => [k, v.slice(0, 500)])
+        );
+        const prepared = await prepare(skill, acceptedState, body.fields || {}, profile);
         send(200, await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
         return;
       }

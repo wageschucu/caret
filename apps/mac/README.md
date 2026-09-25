@@ -35,6 +35,10 @@ The first launch after switching identities needs one more grant; after that reb
 
 Recent-window context is **off** by default (menu → "Include recent windows as context"). When on, the visible text of the front window is captured in memory whenever the window changes (checked on app switches and every 4 s), kept for the last four windows, and sent as `screens`; nothing is written to disk, deny-listed apps and secure input are skipped. This is what lets `summarize what I was just reading` or `extract action items from that` work on a page you read in another app.
 
+## Settings
+
+Menu → **Settings…** (⌘,): helper address, recent-window context, launch at login, the deny list and the Tab-native app list (with an "Add app…" picker), and **About you**: name, email, sign-off and free-form notes (role, language, tone). The profile is sent to the helper only when you accept a skill, goes to the executor as user-provided facts for names, sign-offs and addresses, and is never sent to the router or written to the helper's logs.
+
 ## Debugging
 
 - Menu → "Copy last state (debug)" copies the JSON the host last sent to the helper.
