@@ -236,6 +236,39 @@ export async function* streamCompletion(
   }
 }
 
+// What the executor may answer: either lookups to run first, or the plan itself.
+// The structured-output grammar must stay small, so tool arguments travel as a JSON string
+// (`args_json`) and are parsed back into `args` before the executor validates the plan.
+const CALL_SCHEMA = {
+  type: 'object',
+  properties: { tool: { type: 'string' }, args_json: { type: 'string' } },
+  required: ['tool', 'args_json'],
+  additionalProperties: false,
+};
+const PLAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    preview: { type: 'string' },
+    missing_slots: { type: 'array', items: { type: 'string' } },
+    calls: { type: 'array', items: CALL_SCHEMA },
+    lookups: { type: 'array', items: CALL_SCHEMA },
+  },
+  required: ['preview', 'missing_slots', 'calls', 'lookups'],
+  additionalProperties: false,
+};
+const unpackArgs = (list) =>
+  (Array.isArray(list) ? list : []).map(({ tool, args_json, args }) => {
+    let parsed = args && typeof args === 'object' ? args : {};
+    if (typeof args_json === 'string') {
+      try {
+        parsed = JSON.parse(args_json);
+      } catch {
+        parsed = {};
+      }
+    }
+    return { tool, args: parsed };
+  });
+
 // Hosted executor through the official Anthropic SDK. Credentials come from ANTHROPIC_API_KEY or an
 // `ant auth login` profile; nothing is configured in this file. The completer and the router are
 // unaffected: only the accepted skill's planning request goes to the API.
@@ -256,13 +289,20 @@ export async function chatAnthropic(messages, { model, signal, json, maxTokens }
     .filter((m) => m.role !== 'system')
     .map((m) => ({ role: m.role, content: m.content }));
   const fast = /haiku/.test(model); // Haiku 4.5 has no adaptive thinking; the 4.6+ family runs it and takes effort
+  // The plan envelope is enforced by the API (structured output), so the model cannot answer in prose.
+  const format = json ? { type: 'json_schema', schema: PLAN_SCHEMA } : undefined;
   const response = await client.messages.create(
     {
       model,
       max_tokens: Math.max(maxTokens, 1024),
-      system: system + (json ? '\nRespond with a single JSON object and nothing else.' : ''),
+      system:
+        system +
+        (json
+          ? '\nIn calls and lookups, put the tool arguments as a JSON object encoded in the args_json string, e.g. "args_json": "{\\"to\\": \\"a@b.c\\"}".'
+          : ''),
       messages: turns,
-      ...(fast ? {} : { thinking: { type: 'adaptive' }, output_config: { effort: 'low' } }),
+      output_config: { ...(fast ? {} : { effort: 'low' }), ...(format ? { format } : {}) },
+      ...(fast ? {} : { thinking: { type: 'adaptive' } }),
     },
     { signal }
   );
@@ -271,7 +311,15 @@ export async function chatAnthropic(messages, { model, signal, json, maxTokens }
     .filter((b) => b.type === 'text')
     .map((b) => b.text)
     .join('');
-  if (json) text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  if (json) {
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    try {
+      const plan = JSON.parse(text);
+      text = JSON.stringify({ ...plan, calls: unpackArgs(plan.calls), lookups: unpackArgs(plan.lookups) });
+    } catch {
+      // not JSON: the executor turns prose into a preview
+    }
+  }
   return {
     text,
     usage: {

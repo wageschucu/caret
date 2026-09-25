@@ -114,7 +114,12 @@ test('anthropic executor sends system + turns through the SDK client and strips 
         return {
           stop_reason: 'end_turn',
           model: 'claude-haiku-4-5',
-          content: [{ type: 'text', text: '```json\n{"preview":"x","missing_slots":[],"calls":[]}\n```' }],
+          content: [
+            {
+              type: 'text',
+              text: '```json\n{"preview":"x","missing_slots":[],"calls":[{"tool":"text.result","args_json":"{\\"text\\":\\"hi\\"}"}],"lookups":[]}\n```',
+            },
+          ],
           usage: { input_tokens: 10, output_tokens: 5 },
         };
       },
@@ -129,10 +134,18 @@ test('anthropic executor sends system + turns through the SDK client and strips 
     { client }
   );
   assert.equal(seen.model, 'claude-haiku-4-5');
-  assert.match(seen.system, /^S\n/);
+  assert.match(seen.system, /^S/);
   assert.deepEqual(seen.messages, [{ role: 'user', content: 'U' }]);
   assert.equal(seen.thinking, undefined); // Haiku: no adaptive thinking
+  assert.equal(seen.output_config.format.type, 'json_schema');
+  assert.deepEqual(seen.output_config.format.schema.required, [
+    'preview',
+    'missing_slots',
+    'calls',
+    'lookups',
+  ]);
   assert.equal(JSON.parse(r.text).preview, 'x');
+  assert.deepEqual(JSON.parse(r.text).calls[0], { tool: 'text.result', args: { text: 'hi' } });
   const refusing = { messages: { create: async () => ({ stop_reason: 'refusal', content: [], usage: {} }) } };
   await assert.rejects(
     chatAnthropic([{ role: 'user', content: 'U' }], { model: 'claude-opus-5' }, { client: refusing })

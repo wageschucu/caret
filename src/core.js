@@ -98,7 +98,9 @@ export function forwardContext(skill, state) {
       // small enough to stay well inside a local model's context window.
       result['recent-screens'] = {
         kind: 'untrusted-reference-data',
-        screens: state.screens.slice(-2).map((s) => ({ ...s, text: String(s.text || '').slice(0, 3000) })),
+        screens: (state.screens || [])
+          .slice(-2)
+          .map((s) => ({ ...s, text: String(s.text || '').slice(0, 3000) })),
       };
   }
   return result;
