@@ -93,21 +93,7 @@ final class SettingsWindow: NSPanel {
     close.keyEquivalent = "\u{1b}"
     close.bezelStyle = .rounded
     stack.addArrangedSubview(close)
-    // Scrollable, so a growing settings list can never clip controls off the top of the window.
-    let scroll = NSScrollView()
-    scroll.hasVerticalScroller = true
-    scroll.drawsBackground = false
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    let clip = NSView()
-    clip.translatesAutoresizingMaskIntoConstraints = false
-    clip.addSubview(stack)
-    NSLayoutConstraint.activate([
-      stack.topAnchor.constraint(equalTo: clip.topAnchor), stack.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-      stack.trailingAnchor.constraint(equalTo: clip.trailingAnchor), stack.bottomAnchor.constraint(equalTo: clip.bottomAnchor),
-      clip.widthAnchor.constraint(equalToConstant: 560),
-    ])
-    scroll.documentView = clip
-    contentView = scroll
+    contentView = stack
     contentStack = stack
   }
 
@@ -162,14 +148,11 @@ final class SettingsWindow: NSPanel {
     notesView.string = profile["notes"] ?? ""
     currenciesField.stringValue = profile["currencies"] ?? ""
     stylePopup.selectItem(at: Settings.resultStyle == "verbose" ? 1 : 0)
+    // Size to the content so nothing is clipped; the stack is anchored to the window's bottom edge.
     contentStack.layoutSubtreeIfNeeded()
-    let wanted = contentStack.fittingSize.height + 28
-    let maxHeight = (NSScreen.main?.visibleFrame.height ?? 800) - 60
+    let wanted = contentStack.fittingSize.height
+    let maxHeight = (NSScreen.main?.visibleFrame.height ?? 800) - 40
     setContentSize(NSSize(width: 560, height: min(wanted, maxHeight)))
-    if let doc = (contentView as? NSScrollView)?.documentView {
-      doc.frame.size.height = contentStack.fittingSize.height
-      (contentView as? NSScrollView)?.contentView.scroll(to: NSPoint(x: 0, y: doc.frame.height))
-    }
     center()
     orderFrontRegardless()
     makeKey()
