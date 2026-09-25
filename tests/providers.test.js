@@ -90,11 +90,11 @@ test('currency conversion uses the reference-rate service and labels the result'
     return {
       ok: true,
       status: 200,
-      json: async () => ({ amount: 250, base: 'CHF', date: '2026-09-25', rates: { EUR: 265.4 } }),
+      json: async () => ({ amount: 1, base: 'CHF', date: '2026-09-25', rates: { EUR: 1.0616 } }),
     };
   };
   const text = await convertCurrency({ amount: 250, from: 'CHF', to: 'EUR', style: 'verbose' }, { fetcher });
-  assert.match(url, /amount=250&from=CHF&to=EUR$/);
+  assert.match(url, /from=CHF&to=EUR$/);
   assert.equal(text, '250.00 CHF ≈ 265.40 EUR (ECB reference rate, 2026-09-25)');
   assert.equal(await convertCurrency({ amount: 250, from: 'CHF', to: 'EUR' }, { fetcher }), '265.40 EUR');
   await assert.rejects(

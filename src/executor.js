@@ -267,7 +267,16 @@ export async function prepare(skill, state, fields = {}, profile = {}) {
   if (skill.allowed_tools.includes('fx.convert'))
     fields = { ...currencyHints(context.buffer, fields, profile), ...fields };
   let plan;
-  if (!process.env.LLM_MODEL) plan = demoPlan(skill, context, fields, profile);
+  const fx = skill.allowed_tools.includes('fx.convert') ? fields : null;
+  if (fx?.amount && fx.from && fx.to && /^[A-Z]{3}$/.test(fx.from) && /^[A-Z]{3}$/.test(fx.to)) {
+    // Everything the tool needs was parsed deterministically: no model call, no wait.
+    plan = {
+      preview: `${fx.amount} ${fx.from} → ${fx.to}`,
+      missing_slots: [],
+      calls: [{ tool: 'fx.convert', args: { amount: fx.amount, from: fx.from, to: fx.to } }],
+      usage: {},
+    };
+  } else if (!process.env.LLM_MODEL) plan = demoPlan(skill, context, fields, profile);
   else {
     const r = await chat(
       [

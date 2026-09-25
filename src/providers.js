@@ -357,17 +357,48 @@ ${String(draft.output).trim()}
 
 // Reference exchange rate from the ECB via Frankfurter (no key). Only the amount and the two
 // currency codes are sent. The result names its source and date so it is never mistaken for a quote.
+// Rates are published once a day; a pair is fetched once per calendar day and reused.
+const rateCache = new Map();
 export async function convertCurrency({ amount, from, to, style = 'compact' }, { fetcher = fetch } = {}) {
   if (from === to) return `${formatAmount(amount)} ${from}`;
-  const url = `${process.env.FX_BASE_URL || 'https://api.frankfurter.app'}/latest?amount=${amount}&from=${from}&to=${to}`;
-  const r = await fetcher(url, { signal: AbortSignal.timeout(8000) });
-  if (r.status === 404) throw Error(`No reference rate for ${from}→${to}`);
-  if (!r.ok) throw Error(`Rate service unavailable (${r.status})`);
-  const data = await r.json();
-  const value = data.rates?.[to];
-  if (!Number.isFinite(value)) throw Error('Rate service returned no rate');
+  const day = new Date().toISOString().slice(0, 10),
+    key = `${from}/${to}/${day}`;
+  let entry = rateCache.get(key);
+  if (!entry) {
+    const url = `${process.env.FX_BASE_URL || 'https://api.frankfurter.app'}/latest?from=${from}&to=${to}`;
+    const r = await fetcher(url, { signal: AbortSignal.timeout(8000) });
+    if (r.status === 404) throw Error(`No reference rate for ${from}→${to}`);
+    if (!r.ok) throw Error(`Rate service unavailable (${r.status})`);
+    const data = await r.json();
+    const rate = data.rates?.[to];
+    if (!Number.isFinite(rate)) throw Error('Rate service returned no rate');
+    entry = { rate, date: data.date };
+    rateCache.set(key, entry);
+  }
+  const value = Number(amount) * entry.rate;
   if (style !== 'verbose') return `${formatAmount(value)} ${to}`;
-  return `${formatAmount(amount)} ${from} ≈ ${formatAmount(value)} ${to} (ECB reference rate, ${data.date})`;
+  return `${formatAmount(amount)} ${from} ≈ ${formatAmount(value)} ${to} (ECB reference rate, ${entry.date})`;
+}
+
+// Ollama unloads idle models after five minutes; the first request afterwards pays a multi-second
+// reload. Keep the completer and executor resident while the helper runs.
+export function keepModelsWarm({ fetcher = fetch, intervalMs = 4 * 60 * 1000 } = {}) {
+  if (!isOllama()) return null;
+  const models = [...new Set([process.env.COMPLETER_MODEL, process.env.LLM_MODEL].filter(Boolean))];
+  if (!models.length) return null;
+  const ping = async () => {
+    for (const model of models)
+      await fetcher(baseURL().replace(/\/v1$/, '') + '/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt: '', keep_alive: '60m' }),
+        signal: AbortSignal.timeout(120000),
+      }).catch(() => {});
+  };
+  ping();
+  const timer = setInterval(ping, intervalMs);
+  timer.unref();
+  return timer;
 }
 const formatAmount = (n) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);

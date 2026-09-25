@@ -234,3 +234,24 @@ test('currency hints parse symbols, codes, words and home currencies', async () 
   assert.deepEqual(currencyHints('500chf', { to: 'GBP' }), { amount: '500', from: 'CHF', to: 'GBP' });
   assert.deepEqual(currencyHints('nothing here'), {});
 });
+test('a fully parsed currency request never calls the model', async () => {
+  const { prepare } = await import('../src/executor.js');
+  const old = process.env.LLM_MODEL;
+  process.env.LLM_MODEL = 'model-that-does-not-exist';
+  try {
+    const skill = {
+      slug: 'currency-converter',
+      trust: 'trusted',
+      side_effect_class: 'preview-only',
+      allowed_tools: ['fx.convert'],
+      context: ['buffer'],
+      body: '',
+      version: '1',
+    };
+    const { plan } = await prepare(skill, { buffer: '250chf in euros' }, {}, {});
+    assert.deepEqual(plan.calls[0], { tool: 'fx.convert', args: { amount: 250, from: 'CHF', to: 'EUR' } });
+  } finally {
+    if (old === undefined) delete process.env.LLM_MODEL;
+    else process.env.LLM_MODEL = old;
+  }
+});

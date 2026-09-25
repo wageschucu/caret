@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { loadRegistry, registryHash, parseSkill } from './registry.js';
 import { trimState, RouteSession, THRESHOLDS, ABSTAIN, hash, redact } from './core.js';
-import { route, streamCompletion, draftSkill } from './providers.js';
+import { route, streamCompletion, draftSkill, keepModelsWarm } from './providers.js';
 import { prepare, Executions } from './executor.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSION_TTL = 86400000;
@@ -437,6 +437,7 @@ export async function createApp({
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const server = await createApp();
+  keepModelsWarm();
   server.listen(Number(process.env.PORT) || 4317, '127.0.0.1', () =>
     console.log(`SkillRouter: http://127.0.0.1:${server.address().port}`)
   );
