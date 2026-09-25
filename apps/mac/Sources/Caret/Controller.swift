@@ -491,8 +491,11 @@ final class Controller {
       do {
         // Skills that draft mail get the address-book matches for names in the sentence.
         if client.skill(skill)?.allowed_tools?.contains("mail.draft") == true {
-          let matches = await contacts.lookup(ContactsBridge.names(in: buffer))
+          let names = ContactsBridge.names(in: buffer)
+          let matches = await contacts.lookup(names)
           if !matches.isEmpty { fields["contacts"] = matches.joined(separator: "\n") }
+          // Tell the helper which names were checked, so it need not ask again for the same ones.
+          if !names.isEmpty { fields["contacts_checked"] = names.joined(separator: "|") }
         }
         slotAnswers = fields
         let label = client.label(for: skill)
@@ -515,6 +518,12 @@ final class Controller {
             if tool == "contacts.lookup", let name = args["name"] as? String {
               let matches = await contacts.lookup([name])
               result = matches.isEmpty ? "No contacts match “\(name)”" : matches.joined(separator: "\n")
+            } else if tool == "calendar.freebusy", let from = args["from"] as? String, let to = args["to"] as? String {
+              do {
+                result = try await calendar.freeBusy(from: from, to: to)
+              } catch {
+                result = "Calendar lookup failed: \(error.localizedDescription)"
+              }
             }
             lookups.append(["tool": tool, "args": args, "result": result])
           }

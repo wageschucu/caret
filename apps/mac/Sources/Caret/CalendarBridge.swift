@@ -46,6 +46,24 @@ final class CalendarBridge {
     return (event.eventIdentifier, calendar.title)
   }
 
+  /// Busy periods between two ISO datetimes, one per line, for the executor to pick a free slot.
+  func freeBusy(from: String, to: String) async throws -> String {
+    try await ensureAccess()
+    guard let start = Self.iso.date(from: from), let end = Self.iso.date(from: to), end > start else {
+      throw BridgeError(message: "Invalid time range.")
+    }
+    let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+    let events = store.events(matching: predicate).filter { !$0.isAllDay }.sorted { $0.startDate < $1.startDate }
+    // ISO with offsets, so the helper can check overlaps without assuming a zone.
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
+    let lines = events.prefix(40).map { "busy \(f.string(from: $0.startDate)) to \(f.string(from: $0.endDate)) \($0.title ?? "")" }
+    return lines.isEmpty
+      ? "No events between \(f.string(from: start)) and \(f.string(from: end))."
+      : "Busy periods (\(TimeZone.current.identifier)):\n" + lines.joined(separator: "\n")
+  }
+
   func delete(identifier: String) async throws {
     try await ensureAccess()
     guard let event = store.event(withIdentifier: identifier) else {

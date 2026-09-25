@@ -169,8 +169,30 @@ function demoPlan(skill, context, fields, profile = {}) {
     demo: true,
   };
 }
+// Busy lines look like "busy 2026-09-26T13:00:00-05:00 to 2026-09-26T14:30:00-05:00 Title".
+export function busyConflict(plan, lookups) {
+  const call = (plan.calls || []).find((c) => c?.tool === 'calendar.create');
+  if (!call?.args?.start || !call.args.end) return null;
+  const start = Date.parse(call.args.start),
+    end = Date.parse(call.args.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  for (const l of lookups.filter((x) => x.tool === 'calendar.freebusy')) {
+    for (const m of String(l.result).matchAll(/busy (\S+) to (\S+)(.*)/g)) {
+      const bs = Date.parse(m[1]),
+        be = Date.parse(m[2]);
+      if (Number.isFinite(bs) && Number.isFinite(be) && start < be && end > bs)
+        return `The proposed slot ${call.args.start} to ${call.args.end} overlaps the busy period ${m[1]} to ${m[2]}${m[3].trim() ? ` (${m[3].trim()})` : ''}.`;
+    }
+  }
+  return null;
+}
+
 const describeTarget = (q) =>
-  q.tool === 'github.contributors' ? `contributors of ${q.args.repo}` : q.args.name || q.tool;
+  q.tool === 'github.contributors'
+    ? `contributors of ${q.args.repo}`
+    : q.tool === 'calendar.freebusy'
+      ? 'your calendar'
+      : q.args.name || q.tool;
 // A helper-side lookup may only target something the user named or was looking at.
 function lookupGrounded(q, context) {
   if (q.tool !== 'github.contributors') return true;
@@ -204,7 +226,7 @@ function executorPrompt(skill, gate, profile = {}, lookupTools = []) {
     'The result is what the user asked for, never the request itself: do not repeat or paraphrase the typed instruction anywhere in the output (no "Draft an email to…" first lines, no "Here is…" preambles).',
     `Available tools: ${gate.tools.join(', ')}. Argument schemas: text.result {"text": string}; file.save {"filename": string, "content": string}; calendar.create {"title": string, "start": ISO 8601 with timezone, "end": ISO 8601 with timezone}; url.open {"url": full https URL}; mail.draft {"to": email or "", "subject": string, "body": string}; fx.convert {"amount": number, "from": ISO currency code, "to": ISO currency code} (the tool fetches the real rate; never compute a conversion yourself). Nothing is sent by any tool.`,
     lookupTools.length
-      ? `Before deciding you may request read-only lookups, at most ${LOOKUP_LIMIT} in total, by responding with only {"lookups": [{"tool": string, "args": object}]}. Available lookups: ${lookupTools.map((t) => `${t} ${LOOKUPS[t].schema}: ${LOOKUPS[t].describe}`).join('; ')}. Their results are then given to you as reference data. Request a lookup only for a value you need and cannot find in the sentence, the answers or the reference material; do not repeat one.`
+      ? `Before deciding you may request read-only lookups, at most ${LOOKUP_LIMIT} in total, by responding with only {"lookups": [{"tool": string, "args": object}]}. Available lookups: ${lookupTools.map((t) => `${t} ${LOOKUPS[t].schema}: ${LOOKUPS[t].describe}`).join('; ')}. Their results are then given to you as reference data. Request a lookup only for a value you need and cannot find in the sentence, the answers or the reference material; do not repeat one. Request lookups before listing anything as missing: a lookup often supplies the detail.`
       : '',
     'Respond with JSON only, exactly this shape:',
     '{"preview": string, "missing_slots": string[], "calls": [{"tool": string, "args": object}]}',
@@ -223,21 +245,39 @@ function executorPrompt(skill, gate, profile = {}, lookupTools = []) {
   ].join('\n');
 }
 
-function executorInput(context, fields, lookups = [], finalOnly = false, optionalNote = null) {
-  const parts = [`User typed: ${JSON.stringify(context.buffer || '')}`];
+function executorInput(
+  context,
+  fields,
+  lookups = [],
+  finalOnly = false,
+  optionalNote = null,
+  conflictNote = null
+) {
+  const now = new Date();
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const offset = -now.getTimezoneOffset();
+  const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}${offset >= 0 ? '+' : '-'}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')}:${String(Math.abs(offset) % 60).padStart(2, '0')}`;
+  const parts = [
+    `Now: ${iso} (${now.toLocaleDateString('en-US', { weekday: 'long' })}, ${zone}). Resolve relative dates from this.`,
+    `User typed: ${JSON.stringify(context.buffer || '')}`,
+  ];
   for (const l of lookups)
     parts.push(`--- Lookup result: ${l.tool} ${JSON.stringify(l.args)} (reference data) ---\n${l.result}`);
   if (finalOnly)
     parts.push('All lookups are answered above. Do not request any more; respond with the final plan now.');
+  if (conflictNote)
+    parts.push(
+      conflictNote + ' Choose a slot that does not overlap any busy period and respond with the final plan.'
+    );
   if (optionalNote)
     parts.push(
       `These details are unknown and optional, not missing: ${optionalNote.join(', ')}. Produce the final plan now with them left empty and missing_slots = [].`
     );
   const answers = Object.fromEntries(
-    Object.entries(fields).filter(([k]) => k !== 'result_style' && k !== 'contacts')
+    Object.entries(fields).filter(([k]) => !['result_style', 'contacts', 'contacts_checked'].includes(k))
   );
   if (Object.keys(answers).length) parts.push(`User answers for missing details: ${JSON.stringify(answers)}`);
-  if (fields.contacts)
+  if (fields.contacts && !fields.contacts_checked)
     parts.push(
       `Contacts from the user's address book matching names in the sentence (use the address of the person named; if none fits, leave "to" empty):\n${fields.contacts}`
     );
@@ -320,8 +360,26 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
   else {
     // Planning may request read-only lookups first (bounded); helper-side ones run here, host-side
     // ones are returned as "needs" for the host to answer before planning resumes.
+    // Contacts the host already checked for names in the sentence are answered lookups, so a plain
+    // draft finishes in one round instead of asking for them again.
+    if (fields.contacts_checked) {
+      const matches = String(fields.contacts || '');
+      for (const name of String(fields.contacts_checked)
+        .split('|')
+        .map((x) => x.trim())
+        .filter(Boolean)) {
+        if (lookups.some((l) => l.tool === 'contacts.lookup' && l.args?.name === name)) continue;
+        const hits = matches.split('\n').filter((line) => line.toLowerCase().includes(name.toLowerCase()));
+        lookups.push({
+          tool: 'contacts.lookup',
+          args: { name },
+          result: hits.length ? hits.join('\n') : `No contacts match “${name}”`,
+        });
+      }
+    }
     let finalOnly = false;
     let optionalNote = null;
+    let conflictNote = null;
     for (let round = 0; ; round++) {
       progress(
         round === 0
@@ -333,7 +391,10 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
       const r = await chat(
         [
           { role: 'system', content: executorPrompt(skill, gate, profile, lookupTools) },
-          { role: 'user', content: executorInput(context, fields, lookups, finalOnly, optionalNote) },
+          {
+            role: 'user',
+            content: executorInput(context, fields, lookups, finalOnly, optionalNote, conflictNote),
+          },
         ],
         { model: process.env.LLM_MODEL, json: true }
       );
@@ -360,6 +421,13 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
       if (!requested.length || !lookupTools.length) {
         if (finalOnly && Array.isArray(parsed.lookups) && !parsed.calls)
           throw Error('Executor could not finish after its lookups');
+        // A proposed calendar slot must not overlap anything the free/busy lookup reported.
+        const clash = busyConflict(parsed, lookups);
+        if (clash && !conflictNote) {
+          conflictNote = clash;
+          finalOnly = true;
+          continue;
+        }
         // Only optional details missing (an unknown address, say): one more round to finish without them.
         const missing = Array.isArray(parsed.missing_slots) ? parsed.missing_slots : [];
         const optional = skill.optional_slots || [];

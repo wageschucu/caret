@@ -71,6 +71,8 @@ Besides its one gated action, an accepted skill may request **lookups** while pl
 
 A skill may mark details as optional (`metadata.optional_slots`, e.g. `to,recipient` for drafts): when only those are unknown, the helper asks the model for one more round to finish without them instead of showing a form. On the hosted executor the plan envelope is enforced by structured output (tool arguments travel as `args_json` strings), so the model cannot answer in prose; a prose answer from a local model becomes a preview.
 
+Host-side lookups today: `contacts.lookup` and `calendar.freebusy` (EventKit; busy periods as ISO times with offsets). The host pre-checks the names in the sentence and sends them as answered lookups (`contacts_checked`), so a plain draft needs one round. The helper adds the current date, time and zone to every planning request, and checks a proposed calendar slot against the reported busy periods deterministically, re-prompting once on overlap.
+
 ## Contacts
 
 When the accepted skill may draft mail (`allowed-tools` includes `mail.draft`), the host extracts person names from the sentence (words after "to"/"email", capitalised words), looks them up in Contacts (`NSContactsUsageDescription`, one-time prompt) and sends up to eight "Name <address>" matches as the `contacts` field. The executor may use only those, an address the user typed, or one visible in reference material; anything else is dropped by the helper's recipient guard. Matches are never routed or logged.

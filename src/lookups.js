@@ -13,6 +13,12 @@ export const LOOKUPS = Object.freeze({
     schema: '{"name": string}',
     describe: "address-book entries for a person's name (Name <address> lines)",
   },
+  'calendar.freebusy': {
+    where: 'host',
+    schema: '{"from": ISO datetime, "to": ISO datetime}',
+    describe:
+      "busy periods in the user's calendar between two times, to pick a free slot when the requested time is vague (afternoon, next week)",
+  },
   'github.contributors': {
     where: 'helper',
     schema: '{"repo": "owner/name"}',
@@ -31,6 +37,11 @@ export function validateLookup(request, allowedTools) {
     throw Error(`Lookup not available: ${tool}`);
   if (tool === 'contacts.lookup' && !(typeof args.name === 'string' && args.name.trim()))
     throw Error('contacts.lookup needs a name');
+  if (
+    tool === 'calendar.freebusy' &&
+    !(Number.isFinite(Date.parse(args.from)) && Number.isFinite(Date.parse(args.to)))
+  )
+    throw Error('calendar.freebusy needs from and to as ISO datetimes');
   if (tool === 'github.contributors' && !/^[\w.-]+\/[\w.-]+$/.test(args.repo || ''))
     throw Error('github.contributors needs owner/name');
   return { tool, args };

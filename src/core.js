@@ -179,6 +179,7 @@ export const HOST_TOOLS = Object.freeze({
   // Read-only lookups usable during planning (see lookups.js); never side effects.
   'contacts.lookup': { effect: 'preview-only' },
   'github.contributors': { effect: 'preview-only' },
+  'calendar.freebusy': { effect: 'preview-only' },
   // Opens a compose window with the draft; nothing is sent until the user does it.
   'mail.draft': { effect: 'reversible' },
 });

@@ -255,3 +255,21 @@ test('a fully parsed currency request never calls the model', async () => {
     else process.env.LLM_MODEL = old;
   }
 });
+test('a calendar slot overlapping a busy period is detected', async () => {
+  const { busyConflict } = await import('../src/executor.js');
+  const lookups = [
+    {
+      tool: 'calendar.freebusy',
+      args: {},
+      result:
+        'Busy periods (X):\nbusy 2026-09-26T13:00:00+02:00 to 2026-09-26T14:30:00+02:00 Lunch\nbusy 2026-09-26T15:00:00+02:00 to 2026-09-26T16:00:00+02:00 Dentist',
+    },
+  ];
+  const plan = (start, end) => ({ calls: [{ tool: 'calendar.create', args: { title: 't', start, end } }] });
+  assert.match(
+    busyConflict(plan('2026-09-26T14:30:00+02:00', '2026-09-26T15:30:00+02:00'), lookups),
+    /overlaps/
+  );
+  assert.equal(busyConflict(plan('2026-09-26T16:00:00+02:00', '2026-09-26T17:00:00+02:00'), lookups), null);
+  assert.equal(busyConflict({ calls: [] }, lookups), null);
+});
