@@ -151,3 +151,36 @@ test('anthropic executor sends system + turns through the SDK client and strips 
     chatAnthropic([{ role: 'user', content: 'U' }], { model: 'claude-opus-5' }, { client: refusing })
   );
 });
+test('argument strings with raw newlines inside values are repaired', async () => {
+  const { chatAnthropic } = await import('../src/providers.js');
+  const client = {
+    messages: {
+      create: async () => ({
+        stop_reason: 'end_turn',
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              preview: 'p',
+              missing_slots: [],
+              lookups: [],
+              calls: [
+                {
+                  tool: 'mail.draft',
+                  args_json: '{"to": "", "subject": "Hi", "body": "Dear Sam,\nthanks\n\nBest,\nPaul"}',
+                },
+              ],
+            }),
+          },
+        ],
+        usage: {},
+      }),
+    },
+  };
+  const r = await chatAnthropic(
+    [{ role: 'user', content: 'U' }],
+    { model: 'claude-haiku-4-5', json: true },
+    { client }
+  );
+  assert.equal(JSON.parse(r.text).calls[0].args.body, 'Dear Sam,\nthanks\n\nBest,\nPaul');
+});

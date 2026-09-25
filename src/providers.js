@@ -256,18 +256,36 @@ const PLAN_SCHEMA = {
   required: ['preview', 'missing_slots', 'calls', 'lookups'],
   additionalProperties: false,
 };
-const unpackArgs = (list) =>
-  (Array.isArray(list) ? list : []).map(({ tool, args_json, args }) => {
-    let parsed = args && typeof args === 'object' ? args : {};
-    if (typeof args_json === 'string') {
-      try {
-        parsed = JSON.parse(args_json);
-      } catch {
-        parsed = {};
-      }
+// Multi-line bodies arrive with raw newlines inside the inner JSON string; escape control
+// characters that sit inside quotes before parsing.
+function parseArgsJSON(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    let out = '',
+      inString = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === '"' && text[i - 1] !== '\\') inString = !inString;
+      if (inString && c === '\n') out += '\\n';
+      else if (inString && c === '\r') out += '';
+      else if (inString && c === '\t') out += '\\t';
+      else out += c;
     }
-    return { tool, args: parsed };
-  });
+    try {
+      return JSON.parse(out);
+    } catch {
+      console.warn('Executor arguments were not valid JSON:', text.slice(0, 200).replace(/\n/g, '⏎'));
+      return {};
+    }
+  }
+}
+const unpackArgs = (list) =>
+  (Array.isArray(list) ? list : []).map(({ tool, args_json, args }) => ({
+    tool,
+    args:
+      typeof args_json === 'string' ? parseArgsJSON(args_json) : args && typeof args === 'object' ? args : {},
+  }));
 
 // Hosted executor through the official Anthropic SDK. Credentials come from ANTHROPIC_API_KEY or an
 // `ant auth login` profile; nothing is configured in this file. The completer and the router are
