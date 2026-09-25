@@ -10,6 +10,7 @@ metadata:
   examples: "draft a reply thanking Sam"
   side_effect_class: "preview-only"
   context: "buffer,focused-window,recent-screens"
+  optional_slots: "to,recipient,address,email"
   trust: "trusted"
 ---
 

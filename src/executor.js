@@ -223,12 +223,16 @@ function executorPrompt(skill, gate, profile = {}, lookupTools = []) {
   ].join('\n');
 }
 
-function executorInput(context, fields, lookups = [], finalOnly = false) {
+function executorInput(context, fields, lookups = [], finalOnly = false, optionalNote = null) {
   const parts = [`User typed: ${JSON.stringify(context.buffer || '')}`];
   for (const l of lookups)
     parts.push(`--- Lookup result: ${l.tool} ${JSON.stringify(l.args)} (reference data) ---\n${l.result}`);
   if (finalOnly)
     parts.push('All lookups are answered above. Do not request any more; respond with the final plan now.');
+  if (optionalNote)
+    parts.push(
+      `These details are unknown and optional, not missing: ${optionalNote.join(', ')}. Produce the final plan now with them left empty and missing_slots = [].`
+    );
   const answers = Object.fromEntries(
     Object.entries(fields).filter(([k]) => k !== 'result_style' && k !== 'contacts')
   );
@@ -317,6 +321,7 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
     // Planning may request read-only lookups first (bounded); helper-side ones run here, host-side
     // ones are returned as "needs" for the host to answer before planning resumes.
     let finalOnly = false;
+    let optionalNote = null;
     for (let round = 0; ; round++) {
       progress(
         round === 0
@@ -328,7 +333,7 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
       const r = await chat(
         [
           { role: 'system', content: executorPrompt(skill, gate, profile, lookupTools) },
-          { role: 'user', content: executorInput(context, fields, lookups, finalOnly) },
+          { role: 'user', content: executorInput(context, fields, lookups, finalOnly, optionalNote) },
         ],
         { model: process.env.LLM_MODEL, json: true }
       );
@@ -349,6 +354,15 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
       if (!requested.length || !lookupTools.length) {
         if (finalOnly && Array.isArray(parsed.lookups) && !parsed.calls)
           throw Error('Executor could not finish after its lookups');
+        // Only optional details missing (an unknown address, say): one more round to finish without them.
+        const missing = Array.isArray(parsed.missing_slots) ? parsed.missing_slots : [];
+        const optional = skill.optional_slots || [];
+        const required = missing.filter((m) => !optional.some((o) => String(m).toLowerCase().includes(o)));
+        if (missing.length && !required.length && !optionalNote) {
+          optionalNote = missing;
+          finalOnly = true;
+          continue;
+        }
         plan = { ...parsed, usage: r.usage, lookups: lookups.map((l) => l.tool) };
         break;
       }

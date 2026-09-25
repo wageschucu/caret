@@ -76,6 +76,11 @@ export function parseSkill(raw, name, file = '') {
       style_slot: m.style_slot || '',
       // Optional: a pattern that forces the chip even when the router's "ready" is low (bare amounts).
       trigger: m.trigger ? new RegExp(m.trigger, 'i') : null,
+      // Details the executor must never ask for: when they are the only "missing" ones, it finishes without them.
+      optional_slots: (m.optional_slots || '')
+        .split(',')
+        .map((v) => v.trim().toLowerCase())
+        .filter(Boolean),
       digest: hash(raw),
       raw,
     };
