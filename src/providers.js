@@ -83,6 +83,8 @@ export function demoRoute(state, skills) {
 }
 export async function chat(messages, { model, signal, json = false, maxTokens = 1400 } = {}) {
   if (!model) throw Error('Configure LLM_MODEL in .env to use the live executor.');
+  if (process.env.EXECUTOR_PROVIDER === 'anthropic')
+    return chatAnthropic(messages, { model, signal, json, maxTokens });
   if (isOllama()) return chatOllama(messages, { model, signal, json, maxTokens });
   const endpoint =
     (process.env.LLM_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/$/, '') + '/chat/completions';
@@ -207,6 +209,52 @@ export async function* streamCompletion(
   } finally {
     control.abort();
   }
+}
+
+// Hosted executor through the official Anthropic SDK. Credentials come from ANTHROPIC_API_KEY or an
+// `ant auth login` profile; nothing is configured in this file. The completer and the router are
+// unaffected: only the accepted skill's planning request goes to the API.
+let anthropicClient = null;
+export async function chatAnthropic(messages, { model, signal, json, maxTokens }, { client } = {}) {
+  if (!client) {
+    if (!anthropicClient) {
+      const { default: Anthropic } = await import('@anthropic-ai/sdk');
+      anthropicClient = new Anthropic({ timeout: 60000, maxRetries: 1 });
+    }
+    client = anthropicClient;
+  }
+  const system = messages
+    .filter((m) => m.role === 'system')
+    .map((m) => m.content)
+    .join('\n\n');
+  const turns = messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({ role: m.role, content: m.content }));
+  const fast = /haiku/.test(model); // Haiku 4.5 has no adaptive thinking; the 4.6+ family runs it and takes effort
+  const response = await client.messages.create(
+    {
+      model,
+      max_tokens: Math.max(maxTokens, 1024),
+      system: system + (json ? '\nRespond with a single JSON object and nothing else.' : ''),
+      messages: turns,
+      ...(fast ? {} : { thinking: { type: 'adaptive' }, output_config: { effort: 'low' } }),
+    },
+    { signal }
+  );
+  if (response.stop_reason === 'refusal') throw Error('The model declined this request');
+  let text = response.content
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+  if (json) text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  return {
+    text,
+    usage: {
+      input_tokens: response.usage?.input_tokens,
+      output_tokens: response.usage?.output_tokens,
+      model: response.model,
+    },
+  };
 }
 
 // Ollama's native chat endpoint: the OpenAI-compatible one cannot set the context window, and the
@@ -409,7 +457,10 @@ export async function convertCurrency({ amount, from, to, style = 'compact' }, {
 // reload. Keep the completer and executor resident while the helper runs.
 export function keepModelsWarm({ fetcher = fetch, intervalMs = 4 * 60 * 1000 } = {}) {
   if (!isOllama()) return null;
-  const models = [...new Set([process.env.COMPLETER_MODEL, process.env.LLM_MODEL].filter(Boolean))];
+  const executorLocal = process.env.EXECUTOR_PROVIDER !== 'anthropic';
+  const models = [
+    ...new Set([process.env.COMPLETER_MODEL, executorLocal ? process.env.LLM_MODEL : null].filter(Boolean)),
+  ];
   if (!models.length) return null;
   const ping = async () => {
     for (const model of models)

@@ -104,3 +104,37 @@ test('currency conversion uses the reference-rate service and labels the result'
     )
   );
 });
+test('anthropic executor sends system + turns through the SDK client and strips fences', async () => {
+  const { chatAnthropic } = await import('../src/providers.js');
+  let seen;
+  const client = {
+    messages: {
+      create: async (params) => {
+        seen = params;
+        return {
+          stop_reason: 'end_turn',
+          model: 'claude-haiku-4-5',
+          content: [{ type: 'text', text: '```json\n{"preview":"x","missing_slots":[],"calls":[]}\n```' }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        };
+      },
+    },
+  };
+  const r = await chatAnthropic(
+    [
+      { role: 'system', content: 'S' },
+      { role: 'user', content: 'U' },
+    ],
+    { model: 'claude-haiku-4-5', json: true, maxTokens: 500 },
+    { client }
+  );
+  assert.equal(seen.model, 'claude-haiku-4-5');
+  assert.match(seen.system, /^S\n/);
+  assert.deepEqual(seen.messages, [{ role: 'user', content: 'U' }]);
+  assert.equal(seen.thinking, undefined); // Haiku: no adaptive thinking
+  assert.equal(JSON.parse(r.text).preview, 'x');
+  const refusing = { messages: { create: async () => ({ stop_reason: 'refusal', content: [], usage: {} }) } };
+  await assert.rejects(
+    chatAnthropic([{ role: 'user', content: 'U' }], { model: 'claude-opus-5' }, { client: refusing })
+  );
+});
