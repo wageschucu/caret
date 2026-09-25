@@ -48,6 +48,10 @@ The standalone host is an implementation choice for the PDF’s open host questi
 - Completer: `llama3.2:1b` through Ollama's raw `/api/generate`. Warm first token 46–240 ms (inside the spec's 200 ms most of the time); the initial load from disk takes ~20 s and the helper keeps the model resident for 30 min after each use. `COMPLETER_BUDGET_MS=800` on this machine so a cold-ish call still yields text. The chat-completions format was unusable for a 1B model (it echoed the JSON envelope).
 - Executor: `llama3.1:8b` on the GPU, 2–9 s per plan at temperature 0. The Homebrew build of Ollama ran on the CPU only (66 s per plan); the official app uses Metal. Prompt restructured to present the typed text plainly with worked examples; skill bodies now say where each detail appears in the sentence. With that, all eight seed skills produce valid plans on the test sentences.
 
+## Hosted executor — 2026-09-25
+
+Executor moved to Claude Haiku 4.5 through the official Anthropic SDK (`EXECUTOR_PROVIDER=anthropic`); the completer stays local and routing stays on Jev. Measured on the same three tasks: translate 12.3 s → 1.6 s, summarize 8.3 s → 1.4 s, contributors draft with GitHub lookup 23.3 s → 4.7 s (Opus 5 at low effort: 1.4 / 2.6 / 9.6 s). Billing, auth and outage errors fall back to the local model automatically (`LLM_FALLBACK_MODEL`) and are shown in the host's status line. Paul chose Haiku for speed.
+
 ## Remaining milestones
 
 M2: ~~opt-in unknown-intent proposal, authoring interface~~ (done 2026-09-25: `RouteSession.proposal` after two consecutive abstains with ready ≥ 0.5 on the same thought; `/api/propose` drafts a SKILL.md with the executor model, the host's ⌘⇧N editor lets the user edit it, `/api/skills` validates, forces `trust: "reviewed"`, writes `skills/<slug>/SKILL.md` and hot-reloads the registry with a new snapshot and a `registry-history.jsonl` entry), debug view, registry rollback, replay-derived per-user thresholds.

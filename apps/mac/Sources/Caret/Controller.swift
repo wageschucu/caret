@@ -122,7 +122,12 @@ final class Controller {
       let boot = try await client.bootstrap()
       connected = true
       var line = boot.mode == "demo" ? "Helper: demo routing" : "Helper: Jev live"
-      if boot.executor == "demo" { line += ", demo executor" }
+      if boot.executor == "demo" {
+        line += ", demo executor"
+      } else if let model = boot.executor_model {
+        line += " · " + model.replacingOccurrences(of: "claude-", with: "")
+        if let problem = boot.executor_fallback { line += " (local fallback: \(problem))" }
+      }
       if let problems = boot.problems, !problems.isEmpty { line += " · \(problems.count) skill(s) skipped" }
       if let warning = boot.warning { line = "Demo routing · " + warning }
       status(line + (tap.isRunning ? "" : " · waiting for Accessibility"), attention: !tap.isRunning)

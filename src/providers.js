@@ -81,10 +81,35 @@ export function demoRoute(state, skills) {
     usage: { input_tokens: 0 },
   };
 }
+// Why the hosted executor is currently unavailable (billing, auth, outage); null when it works.
+export let hostedExecutorProblem = null;
+const FALLBACK_MODEL = () => process.env.LLM_FALLBACK_MODEL || 'llama3.1:8b';
+
 export async function chat(messages, { model, signal, json = false, maxTokens = 1400 } = {}) {
   if (!model) throw Error('Configure LLM_MODEL in .env to use the live executor.');
-  if (process.env.EXECUTOR_PROVIDER === 'anthropic')
-    return chatAnthropic(messages, { model, signal, json, maxTokens });
+  if (process.env.EXECUTOR_PROVIDER === 'anthropic') {
+    try {
+      const r = await chatAnthropic(messages, { model, signal, json, maxTokens });
+      hostedExecutorProblem = null;
+      return r;
+    } catch (e) {
+      // Billing, auth, rate limits and outages fall back to the local model; bad requests do not.
+      const status = e?.status;
+      const retryable =
+        status === 401 ||
+        status === 403 ||
+        status === 429 ||
+        status >= 500 ||
+        !status ||
+        /credit balance/i.test(e.message);
+      if (!retryable) throw e;
+      hostedExecutorProblem = (e.message.match(/"message":"([^"]+)"/)?.[1] || e.message).slice(0, 160);
+      console.warn(
+        `Hosted executor unavailable (${hostedExecutorProblem}); using local ${FALLBACK_MODEL()}.`
+      );
+      return chatOllama(messages, { model: FALLBACK_MODEL(), signal, json, maxTokens });
+    }
+  }
   if (isOllama()) return chatOllama(messages, { model, signal, json, maxTokens });
   const endpoint =
     (process.env.LLM_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/$/, '') + '/chat/completions';
@@ -459,7 +484,9 @@ export function keepModelsWarm({ fetcher = fetch, intervalMs = 4 * 60 * 1000 } =
   if (!isOllama()) return null;
   const executorLocal = process.env.EXECUTOR_PROVIDER !== 'anthropic';
   const models = [
-    ...new Set([process.env.COMPLETER_MODEL, executorLocal ? process.env.LLM_MODEL : null].filter(Boolean)),
+    ...new Set(
+      [process.env.COMPLETER_MODEL, executorLocal ? process.env.LLM_MODEL : FALLBACK_MODEL()].filter(Boolean)
+    ),
   ];
   if (!models.length) return null;
   const ping = async () => {

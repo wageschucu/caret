@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { loadRegistry, registryHash, parseSkill } from './registry.js';
 import { trimState, RouteSession, THRESHOLDS, ABSTAIN, hash, redact } from './core.js';
-import { route, streamCompletion, draftSkill, keepModelsWarm } from './providers.js';
+import { route, streamCompletion, draftSkill, keepModelsWarm, hostedExecutorProblem } from './providers.js';
 import { prepare, Executions } from './executor.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSION_TTL = 86400000;
@@ -103,6 +103,8 @@ export async function createApp({
           token,
           mode: process.env.TYPESAFE_API_KEY && !jevAuthError ? 'live' : 'demo',
           executor: process.env.LLM_MODEL ? 'live' : 'demo',
+          executor_model: process.env.LLM_MODEL || null,
+          executor_fallback: hostedExecutorProblem,
           warning: jevAuthError,
           problems,
           skills: registry.skills.map(

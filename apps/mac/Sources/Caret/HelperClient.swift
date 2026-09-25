@@ -22,6 +22,8 @@ final class HelperClient {
     let token: String
     let mode: String
     let executor: String
+    let executor_model: String?
+    let executor_fallback: String?
     let problems: [String]?
     let warning: String?
     let skills: [Skill]
