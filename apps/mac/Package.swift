@@ -14,6 +14,7 @@ let package = Package(
         .linkedFramework("Carbon"),
         .linkedFramework("EventKit"),
         .linkedFramework("ServiceManagement"),
+        .linkedFramework("Contacts"),
       ]
     )
   ],

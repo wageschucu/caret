@@ -32,6 +32,7 @@ final class Controller {
   private var styleIndex = 0
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
+  private let contacts = ContactsBridge()
   let launcher = HelperLauncher()
   /// Host-side undo for the last calendar event created through EventKit.
   private var calendarUndo: (helperID: String, eventID: String)?
@@ -481,6 +482,11 @@ final class Controller {
         }
         if let slot = client.skill(skill)?.style_slot, !slot.isEmpty, let choice = styles[safe: styleIndex] {
           fields[slot] = choice.value
+        }
+        // Skills that draft mail get the address-book matches for names in the sentence.
+        if client.skill(skill)?.allowed_tools?.contains("mail.draft") == true {
+          let matches = await contacts.lookup(ContactsBridge.names(in: buffer))
+          if !matches.isEmpty { fields["contacts"] = matches.joined(separator: "\n") }
         }
         slotAnswers = fields
         let execution = try await client.prepare(

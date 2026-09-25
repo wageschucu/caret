@@ -110,6 +110,7 @@ export async function createApp({
               variant_slot,
               styles,
               style_slot,
+              allowed_tools,
             }) => ({
               slug,
               label,
@@ -121,6 +122,7 @@ export async function createApp({
               variant_slot,
               styles,
               style_slot,
+              allowed_tools,
             })
           ),
         });

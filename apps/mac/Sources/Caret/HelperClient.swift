@@ -12,6 +12,7 @@ final class HelperClient {
     let variant_slot: String?
     let styles: [StyleOption]?
     let style_slot: String?
+    let allowed_tools: [String]?
   }
   struct StyleOption: Decodable {
     let value: String

@@ -196,8 +196,14 @@ function executorPrompt(skill, gate, profile = {}) {
 
 function executorInput(context, fields) {
   const parts = [`User typed: ${JSON.stringify(context.buffer || '')}`];
-  const answers = Object.fromEntries(Object.entries(fields).filter(([k]) => k !== 'result_style'));
+  const answers = Object.fromEntries(
+    Object.entries(fields).filter(([k]) => k !== 'result_style' && k !== 'contacts')
+  );
   if (Object.keys(answers).length) parts.push(`User answers for missing details: ${JSON.stringify(answers)}`);
+  if (fields.contacts)
+    parts.push(
+      `Contacts from the user's address book matching names in the sentence (use the address of the person named; if none fits, leave "to" empty):\n${fields.contacts}`
+    );
   if (context.selection)
     parts.push(`--- Selected text (reference data, use as content) ---\n${context.selection}`);
   if (context['focused-window']?.text)
@@ -288,6 +294,7 @@ export async function prepare(skill, state, fields = {}, profile = {}) {
       ...Object.values(fields),
       context.selection || '',
       context['focused-window']?.text || '',
+      fields.contacts || '',
       ...(context['recent-screens']?.screens || []).map((x) => x.text || ''),
     ]
       .join('\n')
