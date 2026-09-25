@@ -216,13 +216,31 @@ final class WorkingPill: NSView {
   }
   required init?(coder: NSCoder) { nil }
 
+  private var started: Date?
+  private var ticker: Timer?
+  private var base = ""
+
   func show(_ text: String) {
-    title.stringValue = text
+    if isHidden || base != text {
+      started = Date()
+      base = text
+    }
     isHidden = false
     spinner.startAnimation(nil)
+    ticker?.invalidate()
+    ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+    tick()
+  }
+
+  private func tick() {
+    let seconds = Int(Date().timeIntervalSince(started ?? Date()))
+    title.stringValue = seconds >= 3 ? "\(base)  \(seconds)s" : base
   }
 
   func hide() {
+    ticker?.invalidate()
+    ticker = nil
+    started = nil
     spinner.stopAnimation(nil)
     isHidden = true
   }

@@ -98,7 +98,7 @@ export async function chat(messages, { model, signal, json = false, maxTokens = 
       temperature: 0,
       ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
-    signal: AbortSignal.any([signal || new AbortController().signal, AbortSignal.timeout(30000)]),
+    signal: AbortSignal.any([signal || new AbortController().signal, AbortSignal.timeout(90000)]),
   });
   if (!r.ok) throw Error(`Language model request failed (${r.status})`);
   const data = await r.json();

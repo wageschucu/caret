@@ -100,6 +100,8 @@ final class HelperClient {
 
   private func request(_ endpoint: String, _ body: [String: Any]) throws -> URLRequest {
     var request = URLRequest(url: base.appendingPathComponent("api/\(endpoint)"))
+    // Planning can involve several model rounds and lookups; everything else answers in seconds.
+    request.timeoutInterval = ["prepare", "confirm", "propose"].contains(endpoint) ? 240 : 30
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue(token, forHTTPHeaderField: "X-SkillRouter-Session")
