@@ -192,3 +192,29 @@ test('url.open and mail.draft arguments are validated', () => {
     gate
   );
 });
+test('a mail recipient the user never stated is dropped', async () => {
+  const { prepare } = await import('../src/executor.js');
+  const old = process.env.LLM_MODEL;
+  delete process.env.LLM_MODEL; // demo executor
+  try {
+    const skill = {
+      slug: 'draft-email',
+      trust: 'trusted',
+      side_effect_class: 'reversible',
+      allowed_tools: ['mail.draft'],
+      context: ['buffer'],
+      body: '',
+      version: '1',
+    };
+    const { plan } = await prepare(
+      skill,
+      { buffer: 'draft an email thanking the team' },
+      {},
+      { name: 'Pat' }
+    );
+    assert.equal(plan.calls[0].args.to, '');
+    assert.match(plan.calls[0].args.body, /Pat/);
+  } finally {
+    if (old !== undefined) process.env.LLM_MODEL = old;
+  }
+});

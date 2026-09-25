@@ -30,4 +30,4 @@ Read it from the typed text or the supplied reference material when it is clearl
 Use only mail.draft.
 
 ## Output
-Call mail.draft with the finished email: to (the recipient's address if stated, else ""), a short subject, and the full body with greeting and sign-off. Set preview to the body. Do not describe what you are doing; write the email. Never send.
+Call mail.draft with the finished email: to (the recipient's address if stated, else ""), a short subject, and the full body with greeting and sign-off. Set preview to the body. Sign off with the user's sign-off from the facts about the user when given; otherwise end with a closing line and no name placeholder. Do not describe what you are doing; write the email. Never send.
