@@ -428,30 +428,63 @@ final class Controller {
     }
   }
 
-  /// The helper validated and consumed the confirmation; the host now performs the tool and reports.
+  /// The helper validated (and, where required, consumed the confirmation); the host now performs
+  /// the tool and reports the outcome.
   private func performHostTool(_ execution: HelperClient.Execution) async {
     preview = nil
     syncKeyState()
-    guard let id = execution.id, let call = execution.calls.first, call["tool"] as? String == "calendar.create",
-      let args = call["args"] as? [String: Any], let title = args["title"] as? String,
-      let start = args["start"] as? String, let end = args["end"] as? String
+    guard let id = execution.id, let call = execution.calls.first, let tool = call["tool"] as? String,
+      let args = call["args"] as? [String: Any]
     else {
       previewPanel.showError("The helper handed off an action this host cannot perform.")
       return
     }
     do {
-      let created = try await calendar.create(title: title, start: start, end: end)
-      calendarUndo = (id, created.identifier)
-      lastUndoID = nil
-      try? await client.reportHostExecution(id: id, ok: true)
-      previewPanel.showDone(
-        HelperClient.Execution(
-          status: "done", id: id, skill: execution.skill, preview: nil, missingSlots: [], calls: [],
-          requiresConfirmation: false, demo: false,
-          result: "Added “\(title)” to your “\(created.calendar)” calendar. No invitations were sent.",
-          undoID: "host:" + created.identifier))
+      switch tool {
+      case "calendar.create":
+        guard let title = args["title"] as? String, let start = args["start"] as? String,
+          let end = args["end"] as? String
+        else { throw CalendarBridge.BridgeError(message: "Incomplete calendar event.") }
+        let created = try await calendar.create(title: title, start: start, end: end)
+        calendarUndo = (id, created.identifier)
+        lastUndoID = nil
+        try? await client.reportHostExecution(id: id, ok: true)
+        previewPanel.showDone(
+          HelperClient.Execution(
+            status: "done", id: id, skill: execution.skill, preview: nil, missingSlots: [], calls: [],
+            requiresConfirmation: false, demo: false,
+            result: "Added “\(title)” to your “\(created.calendar)” calendar. No invitations were sent.",
+            undoID: "host:" + created.identifier))
+      case "url.open":
+        guard let raw = args["url"] as? String, let url = URL(string: raw), ["http", "https"].contains(url.scheme ?? "")
+        else { throw CalendarBridge.BridgeError(message: "Not a web address.") }
+        NSWorkspace.shared.open(url)
+        try? await client.reportHostExecution(id: id, ok: true)
+      case "mail.draft":
+        guard let subject = args["subject"] as? String, let body = args["body"] as? String else {
+          throw CalendarBridge.BridgeError(message: "Incomplete mail draft.")
+        }
+        let to = (args["to"] as? String) ?? ""
+        if snapshot?.bundleID == "com.apple.mail" {
+          // Already composing: the draft body replaces the typed instruction in place.
+          previewPanel.orderOut(nil)
+          await returnFocus()
+          AccessibilityReader.replaceBeforeCaret(length: buffer.utf16.count, with: body, in: snapshot)
+          scheduleRefresh()
+        } else {
+          var parts = URLComponents()
+          parts.scheme = "mailto"
+          parts.path = to
+          parts.queryItems = [URLQueryItem(name: "subject", value: subject), URLQueryItem(name: "body", value: body)]
+          guard let url = parts.url else { throw CalendarBridge.BridgeError(message: "Could not build the draft.") }
+          NSWorkspace.shared.open(url)
+        }
+        try? await client.reportHostExecution(id: id, ok: true)
+      default:
+        throw CalendarBridge.BridgeError(message: "This host cannot perform \(tool).")
+      }
     } catch {
-      Diagnostics.log("calendar.create failed: \(error.localizedDescription)")
+      Diagnostics.log("\(tool) failed: \(error.localizedDescription)")
       try? await client.reportHostExecution(id: id, ok: false, error: error.localizedDescription)
       previewPanel.showError(error.localizedDescription)
     }
@@ -473,7 +506,7 @@ final class Controller {
             eventID: eventID, skill: p.skill, buffer: buffer, fields: slotAnswers, previous: id)
           await show(next)
         } else if let id = p.id {
-          await show(try await client.confirm(id: id, hostTools: ["calendar.create"]))
+          await show(try await client.confirm(id: id))
         }
       } catch {
         Diagnostics.log("preview submit failed: \(error.localizedDescription)")

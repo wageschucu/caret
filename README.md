@@ -25,7 +25,7 @@ Try:
 - `save notes as meeting.md: Review the design on Friday` → Tab → a new file with session undo.
 - `thank you` → ghost phrase → Ctrl+Right to accept a word, or Tab to accept the phrase.
 
-Calendar actions create records in **SkillRouter’s local calendar folder** in the browser host; the native macOS host creates them in your real calendar through EventKit (see [docs/host.md](docs/host.md)). No invitations are sent either way. Web search returns a clickable search link; it does not claim to retrieve results.
+Calendar actions create records in **SkillRouter’s local calendar folder** in the browser host; the native macOS host creates them in your real calendar through EventKit (see [docs/host.md](docs/host.md)). No invitations are sent either way. Web search opens the search in your browser (the native host) or shows a clickable link (browser host); it does not claim to retrieve results. Draft email opens a compose window in your mail client, or writes the draft in place when you are already composing in Mail.
 
 ## Connect live models
 

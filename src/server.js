@@ -38,6 +38,10 @@ export async function createApp({
   for (const p of problems) console.warn('Skill skipped: ' + p);
   const executions = new Executions(path.join(dataRoot, 'output'), log),
     sessions = new Map();
+  // Tools a native host may perform itself; anything else always runs here.
+  const HOST_PERFORMABLE = ['calendar.create', 'url.open', 'mail.draft'];
+  const hostToolsOf = (body) =>
+    Array.isArray(body.host_tools) ? body.host_tools.filter((t) => HOST_PERFORMABLE.includes(t)) : [];
   // Set when TypeSafe rejects the key: routing falls back to demo rules (always labeled as such) until restart.
   let jevAuthError = null;
   const server = http.createServer(async (req, res) => {
@@ -219,7 +223,7 @@ export async function createApp({
           state_hash: hash(acceptedState),
         });
         const prepared = await prepare(skill, acceptedState, body.fields || {});
-        send(200, await executions.accept(prepared, event.id, sessionId));
+        send(200, await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
         return;
       }
       if (url.pathname === '/api/confirm') {

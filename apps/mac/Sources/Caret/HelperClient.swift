@@ -145,16 +145,21 @@ final class HelperClient {
     }
   }
 
+  /// Tools this host performs itself; the helper hands them over after running its gate.
+  static let hostTools = ["calendar.create", "url.open", "mail.draft"]
+
   func prepare(eventID: String, skill: String, buffer: String, fields: [String: String], previous: String?)
     async throws -> Execution
   {
-    var body: [String: Any] = ["event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields]
+    var body: [String: Any] = [
+      "event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields, "host_tools": Self.hostTools,
+    ]
     if let previous { body["previous_preview"] = previous }
     return Self.execution(try await postJSON("prepare", body))
   }
 
   /// `hostTools` are tools this host performs itself; the helper then returns status "host_execute".
-  func confirm(id: String, hostTools: [String] = []) async throws -> Execution {
+  func confirm(id: String, hostTools: [String] = HelperClient.hostTools) async throws -> Execution {
     Self.execution(try await postJSON("confirm", ["id": id, "host_tools": hostTools]))
   }
   func reportHostExecution(id: String, ok: Bool, error: String? = nil, undone: Bool = false) async throws {

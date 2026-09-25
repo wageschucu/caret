@@ -135,3 +135,60 @@ test('host-executed tools are gated, consumed once, and reported back', async (t
   );
   assert.equal((await exec.confirm(local.id, 's1', [])).status, 'done');
 });
+test('preview-free host tools are handed off at accept; unclaimed ones run locally', async (t) => {
+  const { exec, logs } = await setup(t);
+  const open = make('preview-only', 'url.open', { url: 'https://www.google.com/search?q=keyboards' });
+  const handoff = await exec.accept(open, 'r1', 's1', ['url.open']);
+  assert.equal(handoff.status, 'host_execute');
+  assert.equal(handoff.call.args.url, 'https://www.google.com/search?q=keyboards');
+  assert.equal((await exec.hostExecuted(handoff.id, 's1', { ok: true })).status, 'done');
+  const local = await exec.accept(make('preview-only', 'url.open', open.plan.calls[0].args), 'r2', 's1', []);
+  assert.equal(local.status, 'done');
+  assert.equal(local.result, 'https://www.google.com/search?q=keyboards');
+  const draft = await exec.accept(
+    make('reversible', 'mail.draft', { to: '', subject: 'Hi', body: 'Hello there' }),
+    'r3',
+    's1',
+    []
+  );
+  assert.match(draft.result, /^To: \nSubject: Hi\n\nHello there$/);
+  // A tool that needs confirmation is never handed off at accept.
+  const event = make('sends-or-pays', 'calendar.create', {
+    title: 'x',
+    start: '2026-10-01T10:00:00Z',
+    end: '2026-10-01T11:00:00Z',
+  });
+  assert.equal((await exec.accept(event, 'r4', 's1', ['calendar.create'])).status, 'preview');
+  assert(logs.some((e) => e.host_executed && !e.confirmed && e.executed));
+});
+test('url.open and mail.draft arguments are validated', () => {
+  const gate = permission({
+    trust: 'trusted',
+    side_effect_class: 'preview-only',
+    allowed_tools: ['url.open', 'mail.draft'],
+  });
+  assert.throws(() =>
+    validatePlan(
+      {
+        preview: 'x',
+        missing_slots: [],
+        calls: [{ tool: 'url.open', args: { url: 'javascript:alert(1)' } }],
+      },
+      gate
+    )
+  );
+  assert.throws(() =>
+    validatePlan(
+      { preview: 'x', missing_slots: [], calls: [{ tool: 'mail.draft', args: { subject: 'x', body: '' } }] },
+      gate
+    )
+  );
+  validatePlan(
+    {
+      preview: 'x',
+      missing_slots: [],
+      calls: [{ tool: 'mail.draft', args: { to: 'a@b.c', subject: 'x', body: 'y' } }],
+    },
+    gate
+  );
+});

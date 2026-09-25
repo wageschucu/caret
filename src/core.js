@@ -146,6 +146,10 @@ export const HOST_TOOLS = Object.freeze({
   'text.result': { effect: 'preview-only' },
   'file.save': { effect: 'reversible' },
   'calendar.create': { effect: 'sends-or-pays' },
+  // Opens a page in the browser: nothing is sent or changed.
+  'url.open': { effect: 'preview-only' },
+  // Opens a compose window with the draft; nothing is sent until the user does it.
+  'mail.draft': { effect: 'reversible' },
 });
 export function permission(skill, hostTools = HOST_TOOLS) {
   const rank = { 'preview-only': 0, reversible: 1, 'sends-or-pays': 2, destructive: 3 };
