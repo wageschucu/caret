@@ -1,6 +1,8 @@
 #!/bin/sh
 # Builds Caret.app from the Swift package. Command Line Tools are enough; Xcode is not required.
-# Usage: apps/mac/build.sh [--run]
+# Usage: apps/mac/build.sh [--run | --install]
+#   --run      relaunch from apps/mac/build/Caret.app
+#   --install  copy to /Applications/Caret.app and relaunch from there (use this for the login item)
 set -eu
 cd "$(dirname "$0")"
 REPO="$(cd ../.. && pwd)"
@@ -47,10 +49,17 @@ sed -i '' "s|__REPO__|$REPO|" "$APP/Contents/Info.plist"
 codesign --force --sign "${CARET_SIGN_IDENTITY:--}" --identifier com.paulgettel.caret "$APP" >/dev/null
 [ -n "${CARET_SIGN_IDENTITY:-}" ] && echo "signed with $CARET_SIGN_IDENTITY" || echo "ad-hoc signed (Accessibility must be re-granted after each rebuild; see README)"
 echo "built $APP"
-if [ "${1:-}" = "--run" ]; then
+if [ "${1:-}" = "--run" ] || [ "${1:-}" = "--install" ]; then
   pkill -x Caret 2>/dev/null || true
   # The app starts its own helper; a relaunch must not leave the old one serving old code.
   pkill -f "node --env-file-if-exists=.env src/server.js" 2>/dev/null || true
   sleep 1
-  open "$APP"
+  if [ "${1:-}" = "--install" ]; then
+    rm -rf /Applications/Caret.app
+    ditto "$APP" /Applications/Caret.app
+    echo "installed /Applications/Caret.app"
+    open /Applications/Caret.app
+  else
+    open "$APP"
+  fi
 fi

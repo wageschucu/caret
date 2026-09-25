@@ -5,3 +5,4 @@ output/
 *.log
 apps/mac/.build/
 apps/mac/build/
+apps/mac/Resources/Caret.iconset/

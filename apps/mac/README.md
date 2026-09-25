@@ -35,6 +35,12 @@ The first launch after switching identities needs one more grant; after that reb
 
 Recent-window context is **off** by default (menu → "Include recent windows as context"). When on, the visible text of the front window is captured in memory whenever the window changes (checked on app switches and every 4 s), kept for the last four windows, and sent as `screens`; nothing is written to disk, deny-listed apps and secure input are skipped. This is what lets `summarize what I was just reading` or `extract action items from that` work on a page you read in another app.
 
+## Icon, install, notarization
+
+- `swift apps/mac/Resources/make-icon.swift && iconutil -c icns apps/mac/Resources/Caret.iconset -o apps/mac/Resources/Caret.icns` regenerates the icon; `build.sh` bundles `Resources/Caret.icns` when present.
+- `apps/mac/build.sh --install` copies the app to `/Applications` and launches it from there; point "Launch Caret at login" at that copy. The helper still runs from this repository (path embedded at build time).
+- `apps/mac/notarize.sh` signs with a Developer ID certificate, notarizes and staples, for sharing the app with other Macs. It needs an Apple Developer Program membership, a "Developer ID Application" certificate, and `xcrun notarytool store-credentials caret-notary` done once; see the script header. For personal use the self-signed "Caret Dev" build is sufficient.
+
 ## Settings
 
 Menu → **Settings…** (⌘,): helper address, recent-window context, launch at login, the deny list and the Tab-native app list (with an "Add app…" picker), and **About you**: name, email, sign-off and free-form notes (role, language, tone). The profile is sent to the helper only when you accept a skill, goes to the executor as user-provided facts for names, sign-offs and addresses, and is never sent to the router or written to the helper's logs.
