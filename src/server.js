@@ -253,6 +253,62 @@ export async function createApp({
         send(200, await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
         return;
       }
+      if (url.pathname === '/api/debug') {
+        // The one place probabilities are shown: this session's recent routing decisions.
+        const recent = [...session.events.values()]
+          .slice(-25)
+          .reverse()
+          .map((e) => ({
+            ts: e.ts,
+            buffer: e.state.buffer,
+            app: e.state.active_app,
+            ready_p: e.ready_p,
+            distribution: Object.entries(e.choice_distribution)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5),
+            shown: e.shown_slugs,
+            latency_ms: Math.round(e.latency_ms),
+            model: e.jev_model,
+            registry_hash: e.registry_hash.slice(0, 8),
+          }));
+        const history = (
+          await fs.readFile(path.join(dataRoot, 'registry-history.jsonl'), 'utf8').catch(() => '')
+        )
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map(JSON.parse)
+          .slice(-20)
+          .reverse();
+        send(200, { thresholds: THRESHOLDS, registry_hash: registry.hash, recent, history });
+        return;
+      }
+      if (url.pathname === '/api/registry/rollback') {
+        // Restore every skill file from a recorded snapshot. Skills added since are moved aside,
+        // never deleted.
+        const target = String(body.registry_hash || '');
+        if (!/^[a-f0-9]{64}$/.test(target)) throw Error('Choose a registry version');
+        const snapshot = JSON.parse(
+          await fs.readFile(path.join(dataRoot, 'registries', target + '.json'), 'utf8')
+        );
+        if (!snapshot.every((s) => typeof s.raw === 'string'))
+          throw Error('This snapshot predates rollback support');
+        const keep = new Set(snapshot.map((s) => s.slug));
+        const aside = path.join(dataRoot, 'trash', new Date().toISOString().replace(/[:.]/g, '-'));
+        for (const s of registry.skills)
+          if (!keep.has(s.slug)) {
+            await fs.mkdir(aside, { recursive: true });
+            await fs.rename(path.join(skillsRoot, s.slug), path.join(aside, s.slug));
+          }
+        for (const s of snapshot) {
+          await fs.mkdir(path.join(skillsRoot, s.slug), { recursive: true });
+          await fs.writeFile(path.join(skillsRoot, s.slug, 'SKILL.md'), s.raw);
+        }
+        await reloadRegistry('rollback', target.slice(0, 8));
+        await log({ type: 'registry', action: 'rollback', to: target, registry_hash: registry.hash });
+        send(200, { registry_hash: registry.hash, skills: registry.active.length, moved_aside: aside });
+        return;
+      }
       if (url.pathname === '/api/propose') {
         // Draft a new skill from an unrecognised intent. Nothing is saved until /api/skills.
         const event = session.events.get(body.event_id);

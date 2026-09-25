@@ -1,4 +1,5 @@
 import test from 'node:test';
+import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {
   selectRoute,
@@ -98,7 +99,10 @@ test('all effect classes and trust levels are enforced in code', () => {
 });
 test('seed registry is portable, hash changes on edits, and Jev never sees bodies', async () => {
   const s = await loadRegistry(new URL('../skills', import.meta.url).pathname);
-  assert.equal(s.length, 8);
+  const folders = (
+    await fs.readdir(new URL('../skills', import.meta.url).pathname, { withFileTypes: true })
+  ).filter((d) => d.isDirectory()).length;
+  assert.equal(s.length, folders);
   assert.notEqual(registryHash(s), registryHash(s.map((v, i) => (i ? v : { ...v, description: 'changed' }))));
   const req = jevRequest({ buffer: 'hi' }, s);
   assert.equal(req.questions.skill.criteria[ABSTAIN], null);
@@ -149,7 +153,10 @@ test('a broken skill is reported and skipped instead of failing the registry', a
   await fs.writeFile(path.join(root, 'broken', 'SKILL.md'), 'no frontmatter');
   const problems = [];
   const loaded = await loadRegistry(root, { onProblem: (m) => problems.push(m) });
-  assert.equal(loaded.length, 8);
+  assert.equal(
+    loaded.length,
+    (await fs.readdir(root, { withFileTypes: true })).filter((d) => d.isDirectory()).length - 1
+  );
   assert.equal(problems.length, 1);
   assert.match(problems[0], /broken/);
   await assert.rejects(loadRegistry(root));

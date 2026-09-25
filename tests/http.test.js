@@ -17,7 +17,12 @@ test('HTTP flow protects local endpoints and binds previews to sessions', async 
   });
   const base = 'http://127.0.0.1:' + server.address().port;
   const boot = await (await fetch(base + '/api/bootstrap')).json();
-  assert.equal(boot.skills.length, 8);
+  assert.equal(
+    boot.skills.length,
+    (await fs.readdir(new URL('../skills', import.meta.url).pathname, { withFileTypes: true })).filter((d) =>
+      d.isDirectory()
+    ).length
+  );
   const post = async (endpoint, body, headers = {}) => {
     const r = await fetch(base + '/api/' + endpoint, {
       method: 'POST',
@@ -95,4 +100,45 @@ test('an unrecognised intent can be drafted, saved as a reviewed skill, and hot-
   const history = (await fs.readFile(path.join(root, 'registry-history.jsonl'), 'utf8')).trim().split('\n');
   assert.equal(history.length, 2);
   assert.match(history[1], /"action":"add"/);
+});
+test('debug lists probabilities and history; rollback restores a snapshot and moves additions aside', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'skillrouter-rollback-'));
+  const skillsRoot = path.join(root, 'skills');
+  await fs.cp(new URL('../skills', import.meta.url).pathname, skillsRoot, { recursive: true });
+  const server = await createApp({ dataRoot: root, skillsRoot });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(async () => {
+    await new Promise((r) => server.close(r));
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const boot = await (await fetch(base + '/api/bootstrap')).json();
+  const post = async (endpoint, body) => {
+    const r = await fetch(base + '/api/' + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-SkillRouter-Session': boot.token },
+      body: JSON.stringify(body),
+    });
+    return { status: r.status, data: await r.json() };
+  };
+  const routed = await post('route', { state: { buffer: 'translate hello into Spanish' } });
+  const before = (await post('debug', {})).data;
+  assert.equal(before.recent[0].buffer, 'translate hello into Spanish');
+  assert(before.recent[0].distribution.length > 0);
+  assert.equal(before.thresholds.version, 'v0.3-1');
+  const original = before.registry_hash;
+  const draft = await post('propose', { event_id: routed.data.event_id });
+  const saved = await post('skills', { markdown: draft.data.markdown });
+  assert.equal(saved.status, 200);
+  const rolled = await post('registry/rollback', { registry_hash: original });
+  assert.equal(rolled.status, 200, JSON.stringify(rolled.data));
+  assert.equal(rolled.data.registry_hash, original);
+  assert.equal(rolled.data.skills, boot.skills.length);
+  await assert.rejects(fs.stat(path.join(skillsRoot, saved.data.slug)));
+  assert.ok((await fs.readdir(rolled.data.moved_aside)).includes(saved.data.slug));
+  const after = (await post('debug', {})).data;
+  assert.equal(after.history[0].action, 'rollback');
 });

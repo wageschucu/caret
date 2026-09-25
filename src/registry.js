@@ -59,6 +59,7 @@ export function parseSkill(raw, name, file = '') {
       origin: m.source || 'custom',
       active: m.active !== 'false',
       digest: hash(raw),
+      raw,
     };
   }
 }

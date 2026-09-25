@@ -172,6 +172,11 @@ final class HelperClient {
   }
 
   /// `hostTools` are tools this host performs itself; the helper then returns status "host_execute".
+  func debug() async throws -> [String: Any] { try await postJSON("debug", [:]) }
+  func rollback(to hash: String) async throws -> [String: Any] {
+    try await postJSON("registry/rollback", ["registry_hash": hash])
+  }
+
   func propose(eventID: String) async throws -> SkillDraft {
     try JSONDecoder().decode(SkillDraft.self, from: try await post("propose", ["event_id": eventID]))
   }

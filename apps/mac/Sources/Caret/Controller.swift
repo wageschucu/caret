@@ -24,6 +24,7 @@ final class Controller {
   private let overlay = OverlayPanel()
   private let previewPanel = PreviewPanel()
   private let proposalWindow = ProposalWindow()
+  let debugWindow = DebugWindow()
   private var canPropose = false
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
@@ -65,6 +66,13 @@ final class Controller {
     previewPanel.onSubmit = { [weak self] fields in self?.submitPreview(fields) }
     previewPanel.onCancel = { [weak self] in self?.cancelPreview() }
     previewPanel.onUndo = { [weak self] in self?.undo() }
+    debugWindow.fetch = { [weak self] in try await self?.client.debug() ?? [:] }
+    debugWindow.rollback = { [weak self] hash in
+      guard let self else { return "" }
+      let result = try await self.client.rollback(to: hash)
+      _ = try? await self.client.bootstrap()
+      return "Rolled back: \(result["skills"] ?? 0) skills active. Moved aside: \(result["moved_aside"] ?? "nothing")."
+    }
     proposalWindow.onSave = { [weak self] markdown in self?.saveProposal(markdown) }
     proposalWindow.onCancel = { [weak self] in
       self?.proposalWindow.orderOut(nil)

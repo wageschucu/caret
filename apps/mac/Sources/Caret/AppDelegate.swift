@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(loginItem)
     menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
     menu.addItem(.separator())
+    menu.addItem(withTitle: "Debug view…", action: #selector(openDebug), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Copy last state (debug)", action: #selector(copyState), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Diagnose focused field in 5 s (debug)", action: #selector(diagnose), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Open helper page", action: #selector(openHelper), keyEquivalent: "").target = self
@@ -96,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
   @objc private func toggleContext() { Settings.screenContext.toggle() }
   @objc private func openSettings() { settingsWindow.present() }
+  @objc private func openDebug() { controller.debugWindow.present() }
   @objc private func toggleLogin() {
     do {
       try HelperLauncher.setLaunchAtLogin(!HelperLauncher.launchesAtLogin)
