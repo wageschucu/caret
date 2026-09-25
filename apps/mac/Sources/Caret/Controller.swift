@@ -225,7 +225,7 @@ final class Controller {
       .map {
         [
           "t": ISO8601DateFormatter().string(from: $0.timestamp), "app": $0.bundleID,
-          "window_title": $0.windowTitle, "text": $0.text,
+          "window_title": $0.windowTitle, "text": $0.text, "url": $0.url,
         ]
       }
     let focusedWindow = s.recent.last { $0.bundleID == s.bundleID && $0.windowTitle == s.windowTitle }?.text ?? ""
@@ -490,8 +490,27 @@ final class Controller {
           if !matches.isEmpty { fields["contacts"] = matches.joined(separator: "\n") }
         }
         slotAnswers = fields
-        let execution = try await client.prepare(
+        var execution = try await client.prepare(
           eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil)
+        // The executor may ask for host-side lookups (Contacts) before it can plan; answer and resume.
+        var rounds = 0
+        while execution.status == "needs", rounds < 3 {
+          rounds += 1
+          var lookups = execution.obtained
+          for need in execution.needs {
+            guard let tool = need["tool"] as? String, let args = need["args"] as? [String: Any] else { continue }
+            var result = "Lookup not available on this host"
+            if tool == "contacts.lookup", let name = args["name"] as? String {
+              let matches = await contacts.lookup([name])
+              result = matches.isEmpty ? "No contacts match “\(name)”" : matches.joined(separator: "\n")
+            }
+            lookups.append(["tool": tool, "args": args, "result": result])
+          }
+          working = client.label(for: skill) + "… (looking up)"
+          render()
+          execution = try await client.prepare(
+            eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil, lookups: lookups)
+        }
         await show(execution)
       } catch {
         Diagnostics.log("prepare failed for \(skill): \(error.localizedDescription)")
@@ -598,7 +617,7 @@ final class Controller {
             status: "done", id: id, skill: execution.skill, preview: nil, missingSlots: [], calls: [],
             requiresConfirmation: false, demo: false,
             result: "Added “\(title)” to your “\(created.calendar)” calendar. No invitations were sent.",
-            undoID: "host:" + created.identifier))
+            undoID: "host:" + created.identifier, needs: [], obtained: []))
       case "url.open":
         guard let raw = args["url"] as? String, let url = URL(string: raw), ["http", "https"].contains(url.scheme ?? "")
         else { throw CalendarBridge.BridgeError(message: "Not a web address.") }
@@ -619,7 +638,7 @@ final class Controller {
         } else {
           var parts = URLComponents()
           parts.scheme = "mailto"
-          parts.path = to
+          parts.path = to.replacingOccurrences(of: " ", with: "")
           parts.queryItems = [URLQueryItem(name: "subject", value: subject), URLQueryItem(name: "body", value: body)]
           guard let url = parts.url else { throw CalendarBridge.BridgeError(message: "Could not build the draft.") }
           NSWorkspace.shared.open(url)

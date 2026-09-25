@@ -62,6 +62,9 @@ final class HelperClient {
     let demo: Bool
     let result: String?
     let undoID: String?
+    /// status "needs": host-side lookups the executor wants answered before it can plan.
+    let needs: [[String: Any]]
+    let obtained: [[String: Any]]
   }
   struct HelperError: LocalizedError {
     let message: String
@@ -169,12 +172,13 @@ final class HelperClient {
   /// Tools this host performs itself; the helper hands them over after running its gate.
   static let hostTools = ["calendar.create", "url.open", "mail.draft"]
 
-  func prepare(eventID: String, skill: String, buffer: String, fields: [String: String], previous: String?)
-    async throws -> Execution
-  {
+  func prepare(
+    eventID: String, skill: String, buffer: String, fields: [String: String], previous: String?,
+    lookups: [[String: Any]] = []
+  ) async throws -> Execution {
     var body: [String: Any] = [
       "event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields, "host_tools": Self.hostTools,
-      "profile": Settings.profile,
+      "profile": Settings.profile, "lookups": lookups,
     ]
     if let previous { body["previous_preview"] = previous }
     return Self.execution(try await postJSON("prepare", body))
@@ -214,6 +218,8 @@ final class HelperClient {
       requiresConfirmation: json["requires_confirmation"] as? Bool ?? false,
       demo: json["demo"] as? Bool ?? false,
       result: json["result"] as? String,
-      undoID: json["undo_id"] as? String)
+      undoID: json["undo_id"] as? String,
+      needs: json["lookups"] as? [[String: Any]] ?? [],
+      obtained: json["obtained"] as? [[String: Any]] ?? [])
   }
 }

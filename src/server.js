@@ -301,7 +301,27 @@ export async function createApp({
             )
             .map(([k, v]) => [k, v.slice(0, 500)])
         );
-        const prepared = await prepare(skill, acceptedState, body.fields || {}, profile);
+        // Lookup results the host already obtained for this accept (host-side lookups).
+        const lookups = (Array.isArray(body.lookups) ? body.lookups : [])
+          .filter((l) => l && typeof l.tool === 'string' && l.args && typeof l.args === 'object')
+          .slice(0, 3)
+          .map((l) => ({ tool: l.tool, args: l.args, result: String(l.result ?? '').slice(0, 6000) }));
+        const prepared = await prepare(skill, acceptedState, body.fields || {}, profile, lookups);
+        if (prepared.needs) {
+          await log({
+            type: 'interaction',
+            routing_event_id: event.id,
+            action: 'lookup',
+            lookups: prepared.needs.map((n) => n.tool),
+          });
+          send(200, {
+            status: 'needs',
+            skill: skill.slug,
+            lookups: prepared.needs,
+            obtained: prepared.lookups,
+          });
+          return;
+        }
         send(200, await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
         return;
       }

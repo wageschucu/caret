@@ -65,6 +65,7 @@ export function trimState(input = {}, now = Date.now()) {
           t: s.t,
           app: clip(s.app, 100),
           window_title: clip(s.window_title, 200),
+          url: clip(s.url, 500),
           text,
         });
       if (state.screens.length === 4) break;
@@ -168,6 +169,9 @@ export const HOST_TOOLS = Object.freeze({
   'url.open': { effect: 'preview-only' },
   // Looks up a reference exchange rate; only amount and currency codes leave the machine.
   'fx.convert': { effect: 'preview-only' },
+  // Read-only lookups usable during planning (see lookups.js); never side effects.
+  'contacts.lookup': { effect: 'preview-only' },
+  'github.contributors': { effect: 'preview-only' },
   // Opens a compose window with the draft; nothing is sent until the user does it.
   'mail.draft': { effect: 'reversible' },
 });

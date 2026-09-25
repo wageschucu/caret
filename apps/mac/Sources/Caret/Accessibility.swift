@@ -53,6 +53,8 @@ struct RecentWindow {
   let bundleID: String
   let windowTitle: String
   let text: String
+  /// Page address when the window is a browser (AXURL of its web area), else empty.
+  let url: String
 }
 
 /// Reads the focused field and recent windows through the Accessibility API.
@@ -296,7 +298,8 @@ final class AccessibilityReader {
     let text = parts.joined(separator: "\n")
     Diagnostics.log("captured window \(bundleID) “\(title.prefix(60))” \(text.count) chars\(root === window ? "" : " (main content)")")
     guard !text.isEmpty else { return }
-    recent.append(RecentWindow(timestamp: Date(), bundleID: bundleID, windowTitle: title, text: text))
+    let url = Self.findWebArea(window, depth: 0).flatMap { Self.pageURL($0) } ?? ""
+    recent.append(RecentWindow(timestamp: Date(), bundleID: bundleID, windowTitle: title, text: text, url: url))
     if recent.count > 4 { recent.removeFirst(recent.count - 4) }
   }
 
@@ -306,6 +309,23 @@ final class AccessibilityReader {
     "AXLandmarkComplementary",
   ]
   private static let chromeRoles: Set<String> = [kAXToolbarRole, kAXMenuBarRole, kAXTabGroupRole, "AXToolbar"]
+
+  private static func findWebArea(_ element: AXUIElement, depth: Int) -> AXUIElement? {
+    guard depth < 25 else { return nil }
+    if string(element, kAXRoleAttribute) == "AXWebArea" { return element }
+    guard let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] else { return nil }
+    for child in children.prefix(200) {
+      if let found = findWebArea(child, depth: depth + 1) { return found }
+    }
+    return nil
+  }
+
+  private static func pageURL(_ webArea: AXUIElement) -> String? {
+    guard let value = attribute(webArea, "AXURL") else { return nil }
+    if let url = value as? URL { return url.absoluteString }
+    if let text = value as? String { return text }
+    return nil
+  }
 
   private static func findMainContent(_ element: AXUIElement, depth: Int) -> AXUIElement? {
     guard depth < 25 else { return nil }
