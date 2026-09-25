@@ -94,7 +94,12 @@ export function forwardContext(skill, state) {
     if (k === 'focused-window' && state.focused_window)
       result['focused-window'] = { kind: 'untrusted-reference-data', text: state.focused_window };
     if (k === 'recent-screens')
-      result['recent-screens'] = { kind: 'untrusted-reference-data', screens: state.screens };
+      // The executor gets the two most recent windows, trimmed: enough for a URL and an article,
+      // small enough to stay well inside a local model's context window.
+      result['recent-screens'] = {
+        kind: 'untrusted-reference-data',
+        screens: state.screens.slice(-2).map((s) => ({ ...s, text: String(s.text || '').slice(0, 3000) })),
+      };
   }
   return result;
 }

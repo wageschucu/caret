@@ -83,6 +83,7 @@ export function demoRoute(state, skills) {
 }
 export async function chat(messages, { model, signal, json = false, maxTokens = 1400 } = {}) {
   if (!model) throw Error('Configure LLM_MODEL in .env to use the live executor.');
+  if (isOllama()) return chatOllama(messages, { model, signal, json, maxTokens });
   const endpoint =
     (process.env.LLM_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/$/, '') + '/chat/completions';
   const r = await fetch(endpoint, {
@@ -206,6 +207,30 @@ export async function* streamCompletion(
   } finally {
     control.abort();
   }
+}
+
+// Ollama's native chat endpoint: the OpenAI-compatible one cannot set the context window, and the
+// default 4k window silently truncates a long planning prompt (system prompt first) and crawls.
+async function chatOllama(messages, { model, signal, json, maxTokens }) {
+  const r = await fetch(baseURL().replace(/\/v1$/, '') + '/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: false,
+      keep_alive: '60m',
+      ...(json ? { format: 'json' } : {}),
+      options: { temperature: 0, num_predict: maxTokens, num_ctx: Number(process.env.LLM_NUM_CTX) || 8192 },
+    }),
+    signal: AbortSignal.any([signal || new AbortController().signal, AbortSignal.timeout(150000)]),
+  });
+  if (!r.ok) throw Error(`Language model request failed (${r.status})`);
+  const data = await r.json();
+  return {
+    text: data.message?.content || '',
+    usage: { input_tokens: data.prompt_eval_count, output_tokens: data.eval_count },
+  };
 }
 
 // Plain continuation of the buffer through Ollama's /api/generate with raw prompting. Screen text is
