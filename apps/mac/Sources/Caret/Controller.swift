@@ -459,7 +459,7 @@ final class Controller {
     previousApp = NSWorkspace.shared.frontmostApplication
     Task {
       do {
-        var fields: [String: String] = [:]
+        var fields: [String: String] = ["result_style": Settings.resultStyle]
         if let slot = client.skill(skill)?.variant_slot, !slot.isEmpty, let choice = variants[safe: variantIndex] {
           fields[slot] = choice
         }

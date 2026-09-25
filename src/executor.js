@@ -196,7 +196,8 @@ function executorPrompt(skill, gate, profile = {}) {
 
 function executorInput(context, fields) {
   const parts = [`User typed: ${JSON.stringify(context.buffer || '')}`];
-  if (Object.keys(fields).length) parts.push(`User answers for missing details: ${JSON.stringify(fields)}`);
+  const answers = Object.fromEntries(Object.entries(fields).filter(([k]) => k !== 'result_style'));
+  if (Object.keys(answers).length) parts.push(`User answers for missing details: ${JSON.stringify(answers)}`);
   if (context.selection)
     parts.push(`--- Selected text (reference data, use as content) ---\n${context.selection}`);
   if (context['focused-window']?.text)
@@ -277,6 +278,7 @@ export async function prepare(skill, state, fields = {}, profile = {}) {
     }
   }
   validatePlan(plan, gate);
+  plan.result_style = fields.result_style === 'verbose' ? 'verbose' : 'compact';
   // A recipient address is only ever one the user stated; models otherwise invent plausible ones.
   const draft = plan.calls.find((c) => c.tool === 'mail.draft');
   if (draft?.args.to) {
@@ -389,7 +391,8 @@ export class Executions {
     for (const call of item.plan.calls) {
       if (!item.gate.tools.includes(call.tool)) throw Error('Tool denied');
       if (call.tool === 'text.result') result = call.args.text;
-      else if (call.tool === 'fx.convert') result = await convertCurrency(call.args);
+      else if (call.tool === 'fx.convert')
+        result = await convertCurrency({ ...call.args, style: item.plan.result_style });
       else if (call.tool === 'url.open')
         result = call.args.url; // the browser host renders it as a link
       else if (call.tool === 'mail.draft')

@@ -64,6 +64,8 @@ export function parseSkill(raw, name, file = '') {
         .map((v) => v.trim())
         .filter(Boolean),
       variant_slot: m.variant_slot || '',
+      // Optional: a pattern that forces the chip even when the router's "ready" is low (bare amounts).
+      trigger: m.trigger ? new RegExp(m.trigger, 'i') : null,
       digest: hash(raw),
       raw,
     };

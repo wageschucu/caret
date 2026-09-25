@@ -12,6 +12,7 @@ metadata:
   context: "buffer,selection,recent-screens"
   variants: "CHF|USD|EUR|GBP|JPY|CAD|AUD"
   variant_slot: "to"
+  trigger: "\\b\\d[\\d,]*(?:\\.\\d+)?\\s?(?:chf|usd|eur|gbp|jpy|cad|aud)\\b|[$€£¥]\\s?\\d"
   trust: "trusted"
 ---
 

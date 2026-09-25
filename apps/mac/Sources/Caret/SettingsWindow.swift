@@ -14,6 +14,7 @@ final class SettingsWindow: NSPanel {
   private let emailField = NSTextField(string: "")
   private let signatureField = NSTextField(string: "")
   private let currenciesField = NSTextField(string: "")
+  private let stylePopup = NSPopUpButton()
   private let notesView = NSTextView()
 
   init() {
@@ -70,6 +71,12 @@ final class SettingsWindow: NSPanel {
     notesView.textContainer?.widthTracksTextView = true
     stack.addArrangedSubview(label("Notes for drafts: role, company, preferred language, tone…", bold: false))
     stack.addArrangedSubview(notesScroll)
+
+    stack.addArrangedSubview(label("Result style for conversions", bold: true))
+    stylePopup.addItems(withTitles: ["Converted amount only, e.g. 264.70 EUR", "Full line with source and rate"])
+    stylePopup.target = self
+    stylePopup.action = #selector(styleChanged)
+    stack.addArrangedSubview(stylePopup)
 
     stack.addArrangedSubview(label("Never read these apps (one bundle identifier per line)", bold: true))
     stack.addArrangedSubview(editor(denyView, action: #selector(addDenyApp)))
@@ -137,6 +144,7 @@ final class SettingsWindow: NSPanel {
     signatureField.stringValue = profile["signature"] ?? ""
     notesView.string = profile["notes"] ?? ""
     currenciesField.stringValue = profile["currencies"] ?? ""
+    stylePopup.selectItem(at: Settings.resultStyle == "verbose" ? 1 : 0)
     center()
     orderFrontRegardless()
     makeKey()
@@ -172,6 +180,7 @@ final class SettingsWindow: NSPanel {
       "notes": notesView.string, "currencies": currenciesField.stringValue,
     ]
   }
+  @objc private func styleChanged() { Settings.resultStyle = stylePopup.indexOfSelectedItem == 1 ? "verbose" : "compact" }
   @objc private func contextChanged() { Settings.screenContext = contextBox.state == .on }
   @objc private func loginChanged() {
     do {

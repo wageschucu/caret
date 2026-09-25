@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { loadRegistry, registryHash, parseSkill } from './registry.js';
-import { trimState, RouteSession, THRESHOLDS, hash, redact } from './core.js';
+import { trimState, RouteSession, THRESHOLDS, ABSTAIN, hash, redact } from './core.js';
 import { route, streamCompletion, draftSkill } from './providers.js';
 import { prepare, Executions } from './executor.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -169,6 +169,22 @@ export async function createApp({
           return;
         }
         session.screens = state.screens;
+        // Deterministic triggers: a skill's pattern matched, so offer it regardless of "ready".
+        const triggered = registry.active
+          .filter((s) => s.trigger && s.trigger.test(state.buffer))
+          .map((s) => s.slug);
+        if (triggered.length) {
+          output = {
+            ...output,
+            ready: Math.max(output.ready, 0.95),
+            distribution: { ...output.distribution },
+          };
+          for (const slug of triggered)
+            output.distribution[slug] = Math.max(output.distribution[slug] || 0, 0.9);
+          output.distribution[ABSTAIN] = Math.min(output.distribution[ABSTAIN] || 0, 0.05);
+          const total = Object.values(output.distribution).reduce((a, b) => a + b, 0);
+          for (const k in output.distribution) output.distribution[k] /= total;
+        }
         const shown = session.router.update(
           output.ready,
           output.distribution,
@@ -189,6 +205,7 @@ export async function createApp({
           set_size: registry.active.length + 1,
           choice_slugs: registry.active.map((s) => s.slug),
           shown_slugs: shown,
+          triggered,
           action: 'none',
           latency_ms: performance.now() - start,
           token_usage: output.usage,

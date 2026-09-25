@@ -69,6 +69,10 @@ Some effects belong to the host, not the helper: `calendar.create` is performed 
 
 A skill may declare `metadata.variants: "A|B|C"` and `metadata.variant_slot: "<slot>"`. While its chip is highlighted the overlay shows the options as pills; ← / → cycles them and Tab accepts chip + option, which the host sends as a slot answer. The host orders options: the one named in the sentence, then the user's profile preferences (home currencies), then the rest, leaving out the source named in the sentence. First use: `currency-converter` with destination currencies; the helper's `fx.convert` tool fetches the ECB reference rate (Frankfurter) so the model never invents a rate, and `currencyHints` parses amount/source/destination deterministically.
 
+## Triggers
+
+A skill may declare `metadata.trigger`, a case-insensitive regular expression. When it matches the typed text the helper offers that chip regardless of the router's "ready" score (the skill is boosted to 0.9 and abstain capped at 0.05 before the threshold table runs), and the routing event records `triggered`. Esc suppression still applies. First use: `currency-converter` matches bare amounts such as `250chf` or `$40`.
+
 ## Known limitations
 
 - Apps with poor Accessibility support (some Electron apps, some web views, Java apps) may expose no value or no caret bounds. The host then degrades: buffer from typed keystrokes only, overlay anchored to the window, or nothing. It must never guess text it cannot read.

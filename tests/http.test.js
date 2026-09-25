@@ -142,3 +142,26 @@ test('debug lists probabilities and history; rollback restores a snapshot and mo
   const after = (await post('debug', {})).data;
   assert.equal(after.history[0].action, 'rollback');
 });
+test('a skill trigger forces its chip for a bare amount and is logged', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'skillrouter-trigger-'));
+  const server = await createApp({ dataRoot: root });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(async () => {
+    await new Promise((r) => server.close(r));
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const boot = await (await fetch(base + '/api/bootstrap')).json();
+  const r = await fetch(base + '/api/route', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-SkillRouter-Session': boot.token },
+    body: JSON.stringify({ state: { buffer: '250chf' } }),
+  });
+  const data = await r.json();
+  assert.deepEqual(data.shown, ['currency-converter']); // demo rules abstain; the trigger does not
+  const log = (await fs.readFile(path.join(root, 'events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(log.find((e) => e.type === 'routing').triggered, ['currency-converter']);
+});
