@@ -259,6 +259,7 @@ const PLAN_SCHEMA = {
 // Multi-line bodies arrive with raw newlines inside the inner JSON string; escape control
 // characters that sit inside quotes before parsing.
 function parseArgsJSON(text) {
+  if (!text.trim()) return {};
   try {
     return JSON.parse(text);
   } catch {
