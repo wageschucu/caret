@@ -3,9 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { loadRegistry, registryHash } from './registry.js';
+import { loadRegistry, registryHash, parseSkill } from './registry.js';
 import { trimState, RouteSession, THRESHOLDS, hash, redact } from './core.js';
-import { route, streamCompletion } from './providers.js';
+import { route, streamCompletion, draftSkill } from './providers.js';
 import { prepare, Executions } from './executor.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSION_TTL = 86400000;
@@ -15,9 +15,33 @@ export async function createApp({
 } = {}) {
   await fs.mkdir(dataRoot, { recursive: true, mode: 0o700 });
   const problems = [];
-  const skills = await loadRegistry(skillsRoot, { onProblem: (m) => problems.push(m) }),
-    active = skills.filter((s) => s.active),
-    registry_hash = registryHash(skills);
+  // The registry is mutable: skills can be added at runtime and are hot-reloaded.
+  const registry = { skills: [], active: [], hash: '' };
+  async function reloadRegistry(action = 'load', slug = null) {
+    problems.length = 0;
+    registry.skills = await loadRegistry(skillsRoot, { onProblem: (m) => problems.push(m) });
+    registry.active = registry.skills.filter((s) => s.active);
+    registry.hash = registryHash(registry.skills);
+    // Snapshot the exact registry so historical routes are reconstructible after edits.
+    await fs.mkdir(path.join(dataRoot, 'registries'), { recursive: true });
+    await fs.writeFile(
+      path.join(dataRoot, 'registries', registry.hash + '.json'),
+      JSON.stringify(registry.skills, null, 2),
+      { mode: 0o600 }
+    );
+    await fs.appendFile(
+      path.join(dataRoot, 'registry-history.jsonl'),
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        action,
+        slug,
+        registry_hash: registry.hash,
+        count: registry.active.length,
+      }) + '\n',
+      { mode: 0o600 }
+    );
+  }
+  await reloadRegistry();
   const eventsFile = path.join(dataRoot, 'events.jsonl');
   const log = async (event) => {
     const row = { id: randomUUID(), ts: new Date().toISOString(), ...event };
@@ -28,13 +52,6 @@ export async function createApp({
     await fs.appendFile(eventsFile, JSON.stringify(row) + '\n', { mode: 0o600 });
     return row;
   };
-  // Snapshot the exact registry once so historical routes are reconstructible after edits.
-  await fs.mkdir(path.join(dataRoot, 'registries'), { recursive: true });
-  await fs.writeFile(
-    path.join(dataRoot, 'registries', registry_hash + '.json'),
-    JSON.stringify(skills, null, 2),
-    { mode: 0o600 }
-  );
   for (const p of problems) console.warn('Skill skipped: ' + p);
   const executions = new Executions(path.join(dataRoot, 'output'), log),
     sessions = new Map();
@@ -81,7 +98,7 @@ export async function createApp({
           executor: process.env.LLM_MODEL ? 'live' : 'demo',
           warning: jevAuthError,
           problems,
-          skills: skills.map(({ slug, label, description, side_effect_class, context, active }) => ({
+          skills: registry.skills.map(({ slug, label, description, side_effect_class, context, active }) => ({
             slug,
             label,
             description,
@@ -136,12 +153,12 @@ export async function createApp({
           start = performance.now();
         let output;
         try {
-          output = await route(state, active, { signal: controller.signal, live: !jevAuthError });
+          output = await route(state, registry.active, { signal: controller.signal, live: !jevAuthError });
         } catch (e) {
           if (e.code !== 'jev_auth') throw e;
           jevAuthError = e.message;
           console.warn(e.message + ' Routing uses demo rules until then.');
-          output = await route(state, active, { live: false });
+          output = await route(state, registry.active, { live: false });
         }
         if (revision !== session.revision || controller.signal.aborted) {
           send(409, { error: 'Superseded route' });
@@ -160,13 +177,13 @@ export async function createApp({
           state_hash: hash(state),
           state_tokens: Math.ceil(Buffer.byteLength(JSON.stringify(state)) / 3),
           state_tokens_estimated: true,
-          registry_hash,
+          registry_hash: registry.hash,
           thresholds_version: THRESHOLDS.version,
           jev_model: output.model,
           ready_p: output.ready,
           choice_distribution: output.distribution,
-          set_size: active.length + 1,
-          choice_slugs: active.map((s) => s.slug),
+          set_size: registry.active.length + 1,
+          choice_slugs: registry.active.map((s) => s.slug),
           shown_slugs: shown,
           action: 'none',
           latency_ms: performance.now() - start,
@@ -177,6 +194,7 @@ export async function createApp({
         send(200, {
           event_id: event.id,
           shown,
+          propose: session.router.proposal,
           mode: output.model === 'demo-rules-not-jev' ? 'demo' : 'live',
           warning: jevAuthError,
         });
@@ -208,7 +226,7 @@ export async function createApp({
         const event = session.events.get(body.event_id);
         if (!event || !event.shown_slugs.includes(body.skill))
           throw Error('Choose a currently offered skill');
-        const skill = skills.find((s) => s.slug === body.skill);
+        const skill = registry.skills.find((s) => s.slug === body.skill);
         if (body.previous_preview) executions.cancel(body.previous_preview, sessionId);
         if (!body.previous_preview)
           await log({ type: 'interaction', routing_event_id: event.id, skill: skill.slug, action: 'tab' });
@@ -233,6 +251,54 @@ export async function createApp({
         );
         const prepared = await prepare(skill, acceptedState, body.fields || {}, profile);
         send(200, await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
+        return;
+      }
+      if (url.pathname === '/api/propose') {
+        // Draft a new skill from an unrecognised intent. Nothing is saved until /api/skills.
+        const event = session.events.get(body.event_id);
+        if (!event) throw Error('Choose a current sentence');
+        const draft = await draftSkill(
+          event.state.buffer,
+          registry.skills.map((s) => s.slug)
+        );
+        await log({ type: 'interaction', routing_event_id: event.id, action: 'propose' });
+        send(200, draft);
+        return;
+      }
+      if (url.pathname === '/api/skills') {
+        // Save a user-authored skill. Trust is forced to "reviewed": preview and confirm until the
+        // user edits the file to say otherwise. The registry reloads immediately.
+        const markdown = String(body.markdown || '');
+        const name = markdown.match(/^---[\s\S]*?\nname:\s*"?([a-z0-9-]+)"?/)?.[1];
+        if (!name) throw Error('The skill needs a name of lowercase letters, digits and dashes');
+        if (registry.skills.some((s) => s.slug === name)) throw Error(`A skill named ${name} already exists`);
+        const reviewed = markdown.replace(/(\n\s*trust:\s*)"?[a-z]+"?/, '$1"reviewed"');
+        const parsed = parseSkill(
+          reviewed.includes('trust:')
+            ? reviewed
+            : reviewed.replace(/\nmetadata:\n/, '\nmetadata:\n  trust: "reviewed"\n'),
+          name
+        );
+        const folder = path.join(skillsRoot, name);
+        await fs.mkdir(folder, { recursive: true });
+        const handle = await fs.open(path.join(folder, 'SKILL.md'), 'wx', 0o644);
+        try {
+          await handle.writeFile(
+            reviewed.includes('trust:')
+              ? reviewed
+              : reviewed.replace(/\nmetadata:\n/, '\nmetadata:\n  trust: "reviewed"\n')
+          );
+        } finally {
+          await handle.close();
+        }
+        await reloadRegistry('add', name);
+        await log({ type: 'registry', action: 'add', skill: name, registry_hash: registry.hash });
+        send(200, {
+          slug: parsed.slug,
+          label: parsed.label,
+          trust: parsed.trust,
+          registry_hash: registry.hash,
+        });
         return;
       }
       if (url.pathname === '/api/confirm') {

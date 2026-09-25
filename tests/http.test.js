@@ -52,3 +52,47 @@ test('HTTP flow protects local endpoints and binds previews to sessions', async 
   assert(log.some((e) => e.type === 'routing' && e.registry_hash && e.state_hash));
   assert(log.some((e) => e.type === 'execution' && e.confirmed && e.executed));
 });
+test('an unrecognised intent can be drafted, saved as a reviewed skill, and hot-reloaded', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'skillrouter-propose-'));
+  const skillsRoot = path.join(root, 'skills');
+  await fs.cp(new URL('../skills', import.meta.url).pathname, skillsRoot, { recursive: true });
+  const server = await createApp({ dataRoot: root, skillsRoot });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(async () => {
+    await new Promise((r) => server.close(r));
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const boot = await (await fetch(base + '/api/bootstrap')).json();
+  const post = async (endpoint, body) => {
+    const r = await fetch(base + '/api/' + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-SkillRouter-Session': boot.token },
+      body: JSON.stringify(body),
+    });
+    return { status: r.status, data: await r.json() };
+  };
+  // Demo rules abstain on this, but "ready" is only high when a demo pattern hits; feed the
+  // proposal path through the router session directly instead.
+  const first = await post('route', { state: { buffer: 'convert 30 dollars to euros please' } });
+  assert.equal(first.data.propose, false);
+  const draft = await post('propose', { event_id: first.data.event_id });
+  assert.equal(draft.status, 200);
+  assert.match(draft.data.markdown, /^---\nname: [a-z0-9-]+\n/);
+  assert.match(draft.data.markdown, /trust: "reviewed"/);
+  const saved = await post('skills', {
+    markdown: draft.data.markdown.replace(/trust: "reviewed"/, 'trust: "trusted"'),
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(saved.data.trust, 'reviewed'); // cannot self-elevate
+  assert.equal((await post('skills', { markdown: draft.data.markdown })).status, 400); // duplicate
+  const after = await (await fetch(base + '/api/bootstrap')).json();
+  assert.equal(after.skills.length, boot.skills.length + 1);
+  assert(after.skills.some((s) => s.slug === saved.data.slug));
+  const history = (await fs.readFile(path.join(root, 'registry-history.jsonl'), 'utf8')).trim().split('\n');
+  assert.equal(history.length, 2);
+  assert.match(history[1], /"action":"add"/);
+});

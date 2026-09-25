@@ -156,3 +156,16 @@ test('a broken skill is reported and skipped instead of failing the registry', a
   assert.equal(loaded.find((s) => s.slug === 'translate').label, 'Translate');
   await fs.rm(root, { recursive: true, force: true });
 });
+test('proposal appears after two consecutive actionable abstains on the same thought', () => {
+  const r = new RouteSession();
+  const abstain = { a: 0.1, [ABSTAIN]: 0.9 };
+  r.update(0.8, abstain, 'convert 30 dollars', 0);
+  assert.equal(r.proposal, false);
+  r.update(0.85, abstain, 'convert 30 dollars to euros', 0);
+  assert.equal(r.proposal, true);
+  r.update(0.2, abstain, 'convert 30 dollars to euros', 0); // not actionable → reset
+  assert.equal(r.proposal, false);
+  r.update(0.8, abstain, 'book a table', 0);
+  r.update(0.8, { a: 0.9, [ABSTAIN]: 0.1 }, 'book a table for two', 0); // a chip appears → reset
+  assert.equal(r.proposal, false);
+});

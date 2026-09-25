@@ -39,7 +39,7 @@ const seeds = [
     'Draft or reply to an email. Not send email, not write a chat message.',
     'draft a reply thanking Sam',
     'preview-only',
-    'buffer,focused-window',
+    'buffer,focused-window,recent-screens',
     'mail.draft',
     'purpose or message',
     'Return the finished email itself as the text result: a “Subject:” line, a blank line, then the body with greeting and sign-off. Do not describe what you are doing; write the email. Never send.',

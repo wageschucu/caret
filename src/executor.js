@@ -225,7 +225,16 @@ export async function prepare(skill, state, fields = {}, profile = {}) {
   // A recipient address is only ever one the user stated; models otherwise invent plausible ones.
   const draft = plan.calls.find((c) => c.tool === 'mail.draft');
   if (draft?.args.to) {
-    const stated = [context.buffer || '', ...Object.values(fields)].join('\n').toLowerCase();
+    // Typed text, slot answers, or reference material the user was looking at (a thread, a signature).
+    const stated = [
+      context.buffer || '',
+      ...Object.values(fields),
+      context.selection || '',
+      context['focused-window']?.text || '',
+      ...(context['recent-screens']?.screens || []).map((x) => x.text || ''),
+    ]
+      .join('\n')
+      .toLowerCase();
     if (!stated.includes(draft.args.to.trim().toLowerCase())) draft.args.to = '';
   }
   return { skill, gate, context, plan };

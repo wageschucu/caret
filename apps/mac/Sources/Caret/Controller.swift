@@ -23,6 +23,8 @@ final class Controller {
   private let tap = KeyTap()
   private let overlay = OverlayPanel()
   private let previewPanel = PreviewPanel()
+  private let proposalWindow = ProposalWindow()
+  private var canPropose = false
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
   let launcher = HelperLauncher()
@@ -63,6 +65,11 @@ final class Controller {
     previewPanel.onSubmit = { [weak self] fields in self?.submitPreview(fields) }
     previewPanel.onCancel = { [weak self] in self?.cancelPreview() }
     previewPanel.onUndo = { [weak self] in self?.undo() }
+    proposalWindow.onSave = { [weak self] markdown in self?.saveProposal(markdown) }
+    proposalWindow.onCancel = { [weak self] in
+      self?.proposalWindow.orderOut(nil)
+      Task { await self?.returnFocus() }
+    }
     NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
     ) { [weak self] _ in Task { @MainActor in self?.appSwitched() } }
@@ -288,6 +295,7 @@ final class Controller {
         chips = result.shown
         chosen = 0
         eventID = result.event_id
+        canPropose = result.propose == true && chips.isEmpty
         render()
         if let warning = result.warning, warning != lastWarning {
           lastWarning = warning
@@ -321,6 +329,7 @@ final class Controller {
     completionTask?.cancel()
     ghost = ""
     chips = []
+    canPropose = false
   }
 
   private var tabSafe: Bool { !(snapshot.map { Settings.tabUnsafeApps.contains($0.bundleID) } ?? false) }
@@ -329,7 +338,7 @@ final class Controller {
   private func syncKeyState() {
     tap.state = KeyTap.State(
       active: snapshot != nil && preview == nil && !busy, hasGhost: !ghost.isEmpty, chipCount: chips.count,
-      tabSafe: tabSafe)
+      tabSafe: tabSafe, canPropose: canPropose)
   }
 
   private func render() {
@@ -346,7 +355,8 @@ final class Controller {
     overlay.show(
       ghost: ghost,
       chips: chips.enumerated().map { (label: client.label(for: $0.element), selected: $0.offset == chosen) },
-      acceptKey: acceptKeyName, anchor: anchor, working: working)
+      acceptKey: acceptKeyName, anchor: anchor, working: working,
+      hint: canPropose ? "⌘⇧N  create a skill for this?" : nil)
   }
 
   // MARK: - Keys
@@ -358,6 +368,7 @@ final class Controller {
     case .dismiss: dismiss()
     case .accept: accept()
     case .ghostWord: insertGhost(wordOnly: true)
+    case .propose: proposeSkill()
     case .cycle(let step):
       guard chips.count > 1 else { return }
       chosen = (chosen + step + chips.count) % chips.count
@@ -412,6 +423,45 @@ final class Controller {
       working = nil
       render()
       syncKeyState()
+    }
+  }
+
+  // MARK: - Skill proposals (spec §7.4)
+
+  private func proposeSkill() {
+    guard canPropose, let eventID, !busy else { return }
+    busy = true
+    working = "Drafting a skill…"
+    clearSuggestions()
+    render()
+    previousApp = NSWorkspace.shared.frontmostApplication
+    Task {
+      do {
+        let draft = try await client.propose(eventID: eventID)
+        working = nil
+        render()
+        proposalWindow.show(markdown: draft.markdown, label: draft.label, demo: draft.demo == true)
+      } catch {
+        working = nil
+        render()
+        previewPanel.showError(error.localizedDescription)
+      }
+      busy = false
+      syncKeyState()
+    }
+  }
+
+  private func saveProposal(_ markdown: String) {
+    Task {
+      do {
+        let saved = try await client.createSkill(markdown: markdown)
+        proposalWindow.orderOut(nil)
+        _ = try? await client.bootstrap()  // refresh labels; the helper reloaded the registry already
+        previewPanel.showNotice(
+          "Skill “\(saved.label ?? saved.slug)” added. It shows a preview and asks for confirmation until you change trust in skills/\(saved.slug)/SKILL.md. Type the sentence again to try it.")
+      } catch {
+        proposalWindow.showError(error.localizedDescription)
+      }
     }
   }
 

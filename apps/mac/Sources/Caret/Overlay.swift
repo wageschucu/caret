@@ -3,6 +3,7 @@ import AppKit
 /// Floating, non-activating panel drawn at the caret: ghost text above, chips below.
 final class OverlayPanel: NSPanel {
   private let ghostLabel = NSTextField(labelWithString: "")
+  private let hintLabel = NSTextField(labelWithString: "")
   private let chipRow = NSStackView()
   private let stack = NSStackView()
 
@@ -34,19 +35,28 @@ final class OverlayPanel: NSPanel {
     stack.orientation = .vertical
     stack.alignment = .leading
     stack.spacing = 4
+    hintLabel.font = NSFont.systemFont(ofSize: 11)
+    hintLabel.textColor = NSColor.tertiaryLabelColor
+    hintLabel.wantsLayer = true
+    hintLabel.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+    hintLabel.layer?.cornerRadius = 4
     stack.addArrangedSubview(ghostLabel)
     stack.addArrangedSubview(chipRow)
+    stack.addArrangedSubview(hintLabel)
     contentView = stack
   }
 
   /// Renders the overlay anchored to `anchor` (AppKit screen coordinates). Hides when there is nothing to show.
   func show(
-    ghost: String, chips: [(label: String, selected: Bool)], acceptKey: String, anchor: CGRect, working: String? = nil
+    ghost: String, chips: [(label: String, selected: Bool)], acceptKey: String, anchor: CGRect,
+    working: String? = nil, hint: String? = nil
   ) {
-    guard !ghost.isEmpty || !chips.isEmpty || working != nil else {
+    guard !ghost.isEmpty || !chips.isEmpty || working != nil || hint != nil else {
       orderOut(nil)
       return
     }
+    hintLabel.stringValue = hint ?? ""
+    hintLabel.isHidden = hint == nil || working != nil
     if let working {
       // A busy pill replaces ghost text and chips while the executor runs.
       ghostLabel.stringValue = "⋯ " + working

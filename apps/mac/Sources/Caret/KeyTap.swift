@@ -6,7 +6,7 @@ import AppKit
 /// the resulting action is delivered on the main thread.
 final class KeyTap {
   enum Key: Int64 {
-    case tab = 48, escape = 53, space = 49, `return` = 36, right = 124, up = 126, down = 125
+    case tab = 48, escape = 53, space = 49, `return` = 36, right = 124, up = 126, down = 125, n = 45
   }
   struct Event {
     let key: Key?
@@ -21,9 +21,10 @@ final class KeyTap {
     var hasGhost = false
     var chipCount = 0
     var tabSafe = true
+    var canPropose = false
   }
   enum Action {
-    case accept, dismiss, ghostWord, cycle(Int)
+    case accept, dismiss, ghostWord, cycle(Int), propose
   }
 
   var onAction: (Action) -> Void = { _ in }
@@ -50,7 +51,10 @@ final class KeyTap {
   var isRunning: Bool { port != nil }
 
   static func decide(_ e: Event, _ s: State) -> Action? {
-    guard s.active, s.hasGhost || s.chipCount > 0, let key = e.key, !e.command else { return nil }
+    guard s.active, let key = e.key else { return nil }
+    // ⌘⇧N proposes a skill; it is the only command-key combination Caret ever takes.
+    if key == .n && e.command && e.shift && !e.control && !e.option { return s.canPropose ? .propose : nil }
+    guard s.hasGhost || s.chipCount > 0, !e.command else { return nil }
     switch key {
     case .escape: return .dismiss
     case .tab where s.tabSafe && !e.shift && !e.control && !e.option: return .accept

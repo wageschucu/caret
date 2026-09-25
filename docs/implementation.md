@@ -50,7 +50,7 @@ The standalone host is an implementation choice for the PDF’s open host questi
 
 ## Remaining milestones
 
-M2: opt-in unknown-intent proposal, authoring interface, debug view, registry versioning/rollback, replay-derived per-user thresholds.
+M2: ~~opt-in unknown-intent proposal, authoring interface~~ (done 2026-09-25: `RouteSession.proposal` after two consecutive abstains with ready ≥ 0.5 on the same thought; `/api/propose` drafts a SKILL.md with the executor model, the host's ⌘⇧N editor lets the user edit it, `/api/skills` validates, forces `trust: "reviewed"`, writes `skills/<slug>/SKILL.md` and hot-reloads the registry with a new snapshot and a `registry-history.jsonl` entry), debug view, registry rollback, replay-derived per-user thresholds.
 
 M3: catalog embeddings/health/vetting/adoption, reviewed-script sandbox, large-registry prefilter or hierarchical Choice, multi-device sync, and voice transcription.
 

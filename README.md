@@ -109,5 +109,5 @@ This is an M1 implementation and a usable local prototype. It does **not** imple
 
 1. **Native macOS host** ([docs/host.md](docs/host.md)): Accessibility API for context, a global event tap for Tab/Esc, a floating panel at the caret. The Node helper is unchanged; the host replaces `public/`.
 2. **Live-model validation**: measure the 200 ms ghost-text budget and routing accuracy with real models; grow the labeled eval set from recorded routing events.
-3. **M2**: unknown-intent proposal, debug view, registry versioning and rollback.
+3. **M2**: ~~unknown-intent proposal~~ (done: ⌘⇧N after two actionable abstains drafts a SKILL.md, saved as *reviewed* and hot-reloaded; `.skillrouter/registry-history.jsonl` records every registry version), debug view, registry rollback.
 4. Other hosts share the helper: Windows (UI Automation), Linux (AT-SPI), phone (keyboard extension / share target).

@@ -2,6 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { hash } from './core.js';
+async function loadSkill(root, name) {
+  const file = path.join(root, name, 'SKILL.md');
+  return parseSkill(await fs.readFile(file, 'utf8'), name, file);
+}
+
 export async function loadRegistry(root, { onProblem = null } = {}) {
   const result = [];
   for (const entry of (await fs.readdir(root, { withFileTypes: true })).sort((a, b) =>
@@ -18,11 +23,10 @@ export async function loadRegistry(root, { onProblem = null } = {}) {
   }
   return result;
 }
-async function loadSkill(root, name) {
+/// Parses and validates one SKILL.md without touching the filesystem. Used before saving a new skill.
+export function parseSkill(raw, name, file = '') {
   {
     const entry = { name };
-    const file = path.join(root, entry.name, 'SKILL.md');
-    const raw = await fs.readFile(file, 'utf8');
     const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
     if (!match) throw Error(`Invalid frontmatter: ${entry.name}`);
     const h = YAML.parse(match[1]),

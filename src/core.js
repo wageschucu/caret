@@ -128,9 +128,13 @@ export class RouteSession {
   shown = [];
   suppressed = new Map();
   boundary = 0;
+  // Spec §7.4: ready is high but the router abstains on two consecutive calls for the same buffer.
+  abstainStreak = 0;
+  abstainBuffer = '';
   dismiss(buffer) {
     for (const k of this.shown) this.suppressed.set(k, { buffer, boundary: this.boundary });
     this.shown = [];
+    this.abstainStreak = 0;
   }
   update(ready, distribution, buffer, boundary = 0) {
     this.boundary = boundary;
@@ -139,7 +143,20 @@ export class RouteSession {
       const s = this.suppressed.get(k);
       return !s || changedCharacters(s.buffer, buffer) > 20 || boundary > s.boundary;
     });
+    const sameThought =
+      !this.abstainBuffer || buffer.startsWith(this.abstainBuffer) || this.abstainBuffer.startsWith(buffer);
+    if (ready >= THRESHOLDS.ready && !this.shown.length && buffer.trim()) {
+      this.abstainStreak = sameThought ? this.abstainStreak + 1 : 1;
+      this.abstainBuffer = buffer;
+    } else {
+      this.abstainStreak = 0;
+      this.abstainBuffer = '';
+    }
     return this.shown;
+  }
+  /// True when an unrecognised but actionable intent deserves the "create a skill?" affordance.
+  get proposal() {
+    return this.abstainStreak >= 2;
   }
 }
 export const HOST_TOOLS = Object.freeze({

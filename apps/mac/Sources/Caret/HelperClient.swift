@@ -20,8 +20,20 @@ final class HelperClient {
   struct RouteResult: Decodable {
     let event_id: String
     let shown: [String]
+    let propose: Bool?
     let mode: String
     let warning: String?
+  }
+  struct SkillDraft: Decodable {
+    let name: String
+    let label: String
+    let markdown: String
+    let demo: Bool?
+  }
+  struct SavedSkill: Decodable {
+    let slug: String
+    let label: String?
+    let trust: String
   }
   struct Completion: Decodable {
     let text: String?
@@ -160,6 +172,13 @@ final class HelperClient {
   }
 
   /// `hostTools` are tools this host performs itself; the helper then returns status "host_execute".
+  func propose(eventID: String) async throws -> SkillDraft {
+    try JSONDecoder().decode(SkillDraft.self, from: try await post("propose", ["event_id": eventID]))
+  }
+  func createSkill(markdown: String) async throws -> SavedSkill {
+    try JSONDecoder().decode(SavedSkill.self, from: try await post("skills", ["markdown": markdown]))
+  }
+
   func confirm(id: String, hostTools: [String] = HelperClient.hostTools) async throws -> Execution {
     Self.execution(try await postJSON("confirm", ["id": id, "host_tools": hostTools]))
   }
