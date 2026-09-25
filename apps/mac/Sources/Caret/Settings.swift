@@ -34,7 +34,7 @@ enum Settings {
   }
 
   /// Facts about the user for the executor (names, sign-offs, addresses). Sent only with an accept,
-  /// never to the router. Keys: name, email, signature, notes.
+  /// never to the router. Keys: name, email, signature, notes, currencies.
   static var profile: [String: String] {
     get { (defaults.dictionary(forKey: "profile") as? [String: String]) ?? [:] }
     set { defaults.set(newValue.filter { !$0.value.isEmpty }, forKey: "profile") }

@@ -218,3 +218,19 @@ test('a mail recipient the user never stated is dropped', async () => {
     if (old !== undefined) process.env.LLM_MODEL = old;
   }
 });
+test('currency hints parse symbols, codes, words and home currencies', async () => {
+  const { currencyHints } = await import('../src/executor.js');
+  assert.deepEqual(currencyHints('250chf in euros'), { amount: '250', from: 'CHF', to: 'EUR' });
+  assert.deepEqual(currencyHints('convert $40', {}, { currencies: 'CHF, USD' }), {
+    amount: '40',
+    from: 'USD',
+    to: 'CHF',
+  });
+  assert.deepEqual(currencyHints('how much is 1,200 eur', {}, { currencies: 'EUR, CHF' }), {
+    amount: '1200',
+    from: 'EUR',
+    to: 'CHF',
+  });
+  assert.deepEqual(currencyHints('500chf', { to: 'GBP' }), { amount: '500', from: 'CHF', to: 'GBP' });
+  assert.deepEqual(currencyHints('nothing here'), {});
+});

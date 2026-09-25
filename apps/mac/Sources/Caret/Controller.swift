@@ -26,6 +26,8 @@ final class Controller {
   private let proposalWindow = ProposalWindow()
   let debugWindow = DebugWindow()
   private var canPropose = false
+  private var variants: [String] = []
+  private var variantIndex = 0
   private var client = HelperClient(base: Settings.helperURL)
   private let calendar = CalendarBridge()
   let launcher = HelperLauncher()
@@ -304,6 +306,7 @@ final class Controller {
         chosen = 0
         eventID = result.event_id
         canPropose = result.propose == true && chips.isEmpty
+        updateVariants()
         render()
         if let warning = result.warning, warning != lastWarning {
           lastWarning = warning
@@ -338,6 +341,36 @@ final class Controller {
     ghost = ""
     chips = []
     canPropose = false
+    variants = []
+    variantIndex = 0
+  }
+
+  /// Destination options for the highlighted chip: the one named in the sentence first, then the
+  /// user's home currencies, then the rest; the source currency in the sentence is left out.
+  private func updateVariants() {
+    variants = []
+    variantIndex = 0
+    guard let slug = chips[safe: chosen], let skill = client.skill(slug), let all = skill.variants, all.count > 1
+    else { return }
+    let lower = buffer.lowercased()
+    var mentioned: [String] = []
+    for code in all where lower.range(of: "\\b" + code.lowercased() + "\\b", options: .regularExpression) != nil {
+      mentioned.append(code)
+    }
+    for (symbol, code) in [("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("¥", "JPY")]
+    where lower.contains(symbol) && !mentioned.contains(code) && all.contains(code) {
+      mentioned.insert(code, at: 0)
+    }
+    // With two currencies named, the first is the source and the last the destination.
+    let source = mentioned.first
+    let stated = mentioned.count > 1 ? mentioned.last : nil
+    let home = (Settings.profile["currencies"] ?? "").uppercased()
+      .split(whereSeparator: { ", ;".contains($0) }).map(String.init).filter { all.contains($0) }
+    var ordered: [String] = []
+    for code in [stated].compactMap({ $0 }) + home + all where !ordered.contains(code) && code != source {
+      ordered.append(code)
+    }
+    variants = ordered
   }
 
   private var tabSafe: Bool { !(snapshot.map { Settings.tabUnsafeApps.contains($0.bundleID) } ?? false) }
@@ -346,7 +379,7 @@ final class Controller {
   private func syncKeyState() {
     tap.state = KeyTap.State(
       active: snapshot != nil && preview == nil && !busy, hasGhost: !ghost.isEmpty, chipCount: chips.count,
-      tabSafe: tabSafe, canPropose: canPropose)
+      tabSafe: tabSafe, canPropose: canPropose, variantCount: variants.count)
   }
 
   private func render() {
@@ -364,7 +397,8 @@ final class Controller {
       ghost: ghost,
       chips: chips.enumerated().map { (label: client.label(for: $0.element), selected: $0.offset == chosen) },
       acceptKey: acceptKeyName, anchor: anchor, working: working,
-      hint: canPropose ? "⌘⇧N  create a skill for this?" : nil)
+      hint: canPropose ? "⌘⇧N  create a skill for this?" : nil,
+      variants: variants.enumerated().map { (label: $0.element, selected: $0.offset == variantIndex) })
   }
 
   // MARK: - Keys
@@ -377,9 +411,14 @@ final class Controller {
     case .accept: accept()
     case .ghostWord: insertGhost(wordOnly: true)
     case .propose: proposeSkill()
+    case .variant(let step):
+      guard variants.count > 1 else { return }
+      variantIndex = (variantIndex + step + variants.count) % variants.count
+      render()
     case .cycle(let step):
       guard chips.count > 1 else { return }
       chosen = (chosen + step + chips.count) % chips.count
+      updateVariants()
       render()
       client.telemetry("cycle", eventID: eventID)
     }
@@ -420,8 +459,13 @@ final class Controller {
     previousApp = NSWorkspace.shared.frontmostApplication
     Task {
       do {
+        var fields: [String: String] = [:]
+        if let slot = client.skill(skill)?.variant_slot, !slot.isEmpty, let choice = variants[safe: variantIndex] {
+          fields[slot] = choice
+        }
+        slotAnswers = fields
         let execution = try await client.prepare(
-          eventID: eventID, skill: skill, buffer: buffer, fields: [:], previous: nil)
+          eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil)
         await show(execution)
       } catch {
         Diagnostics.log("prepare failed for \(skill): \(error.localizedDescription)")

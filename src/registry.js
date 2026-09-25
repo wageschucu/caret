@@ -58,6 +58,12 @@ export function parseSkill(raw, name, file = '') {
       version: m.version || '0',
       origin: m.source || 'custom',
       active: m.active !== 'false',
+      // Optional: choices for one slot, shown as pills under the chip (e.g. destination currencies).
+      variants: (m.variants || '')
+        .split('|')
+        .map((v) => v.trim())
+        .filter(Boolean),
+      variant_slot: m.variant_slot || '',
       digest: hash(raw),
       raw,
     };

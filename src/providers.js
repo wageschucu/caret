@@ -354,3 +354,19 @@ ${String(draft.output).trim()}
 `;
   return { ...draft, markdown, demo: !process.env.LLM_MODEL };
 }
+
+// Reference exchange rate from the ECB via Frankfurter (no key). Only the amount and the two
+// currency codes are sent. The result names its source and date so it is never mistaken for a quote.
+export async function convertCurrency({ amount, from, to }, { fetcher = fetch } = {}) {
+  if (from === to) return `${formatAmount(amount)} ${from}`;
+  const url = `${process.env.FX_BASE_URL || 'https://api.frankfurter.app'}/latest?amount=${amount}&from=${from}&to=${to}`;
+  const r = await fetcher(url, { signal: AbortSignal.timeout(8000) });
+  if (r.status === 404) throw Error(`No reference rate for ${from}→${to}`);
+  if (!r.ok) throw Error(`Rate service unavailable (${r.status})`);
+  const data = await r.json();
+  const value = data.rates?.[to];
+  if (!Number.isFinite(value)) throw Error('Rate service returned no rate');
+  return `${formatAmount(amount)} ${from} ≈ ${formatAmount(value)} ${to} (ECB reference rate, ${data.date})`;
+}
+const formatAmount = (n) =>
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);

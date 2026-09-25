@@ -8,6 +8,8 @@ final class HelperClient {
     let description: String
     let side_effect_class: String
     let active: Bool
+    let variants: [String]?
+    let variant_slot: String?
   }
   struct Bootstrap: Decodable {
     let token: String

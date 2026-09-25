@@ -13,6 +13,7 @@ final class SettingsWindow: NSPanel {
   private let nameField = NSTextField(string: "")
   private let emailField = NSTextField(string: "")
   private let signatureField = NSTextField(string: "")
+  private let currenciesField = NSTextField(string: "")
   private let notesView = NSTextView()
 
   init() {
@@ -45,7 +46,10 @@ final class SettingsWindow: NSPanel {
     stack.addArrangedSubview(loginBox)
 
     stack.addArrangedSubview(label("About you — used when drafting (name, sign-off, address). Never sent to the router.", bold: true))
-    for (field, placeholder) in [(nameField, "Name"), (emailField, "Email address"), (signatureField, "Sign-off, e.g. “Best, Paul”")] {
+    for (field, placeholder) in [
+      (nameField, "Name"), (emailField, "Email address"), (signatureField, "Sign-off, e.g. “Best, Paul”"),
+      (currenciesField, "Home currencies in order, e.g. CHF, USD"),
+    ] {
       field.placeholderString = placeholder
       field.target = self
       field.action = #selector(profileChanged)
@@ -132,6 +136,7 @@ final class SettingsWindow: NSPanel {
     emailField.stringValue = profile["email"] ?? ""
     signatureField.stringValue = profile["signature"] ?? ""
     notesView.string = profile["notes"] ?? ""
+    currenciesField.stringValue = profile["currencies"] ?? ""
     center()
     orderFrontRegardless()
     makeKey()
@@ -164,7 +169,7 @@ final class SettingsWindow: NSPanel {
   @objc private func profileChanged() {
     Settings.profile = [
       "name": nameField.stringValue, "email": emailField.stringValue, "signature": signatureField.stringValue,
-      "notes": notesView.string,
+      "notes": notesView.string, "currencies": currenciesField.stringValue,
     ]
   }
   @objc private func contextChanged() { Settings.screenContext = contextBox.state == .on }

@@ -98,14 +98,18 @@ export async function createApp({
           executor: process.env.LLM_MODEL ? 'live' : 'demo',
           warning: jevAuthError,
           problems,
-          skills: registry.skills.map(({ slug, label, description, side_effect_class, context, active }) => ({
-            slug,
-            label,
-            description,
-            side_effect_class,
-            context,
-            active,
-          })),
+          skills: registry.skills.map(
+            ({ slug, label, description, side_effect_class, context, active, variants, variant_slot }) => ({
+              slug,
+              label,
+              description,
+              side_effect_class,
+              context,
+              active,
+              variants,
+              variant_slot,
+            })
+          ),
         });
         return;
       }
@@ -245,7 +249,9 @@ export async function createApp({
           Object.entries(body.profile || {})
             .filter(
               ([k, v]) =>
-                ['name', 'email', 'signature', 'notes'].includes(k) && typeof v === 'string' && v.trim()
+                ['name', 'email', 'signature', 'notes', 'currencies'].includes(k) &&
+                typeof v === 'string' &&
+                v.trim()
             )
             .map(([k, v]) => [k, v.slice(0, 500)])
         );

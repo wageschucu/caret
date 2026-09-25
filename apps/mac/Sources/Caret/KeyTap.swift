@@ -6,7 +6,7 @@ import AppKit
 /// the resulting action is delivered on the main thread.
 final class KeyTap {
   enum Key: Int64 {
-    case tab = 48, escape = 53, space = 49, `return` = 36, right = 124, up = 126, down = 125, n = 45
+    case tab = 48, escape = 53, space = 49, `return` = 36, right = 124, up = 126, down = 125, n = 45, left = 123
   }
   struct Event {
     let key: Key?
@@ -22,9 +22,10 @@ final class KeyTap {
     var chipCount = 0
     var tabSafe = true
     var canPropose = false
+    var variantCount = 0  // destination options under the highlighted chip
   }
   enum Action {
-    case accept, dismiss, ghostWord, cycle(Int), propose
+    case accept, dismiss, ghostWord, cycle(Int), propose, variant(Int)
   }
 
   var onAction: (Action) -> Void = { _ in }
@@ -60,6 +61,8 @@ final class KeyTap {
     case .tab where s.tabSafe && !e.shift && !e.control && !e.option: return .accept
     case .space where !s.tabSafe && e.control: return .accept
     case .right where (e.control || e.option) && s.hasGhost: return .ghostWord
+    case .right where s.variantCount > 1 && !e.control && !e.option && !e.shift: return .variant(1)
+    case .left where s.variantCount > 1 && !e.control && !e.option && !e.shift: return .variant(-1)
     case .up where s.chipCount > 1: return .cycle(-1)
     case .down where s.chipCount > 1: return .cycle(1)
     default: return nil

@@ -5,6 +5,7 @@ final class OverlayPanel: NSPanel {
   private let ghostLabel = NSTextField(labelWithString: "")
   private let hintLabel = NSTextField(labelWithString: "")
   private let chipRow = NSStackView()
+  private let variantRow = NSStackView()
   private let stack = NSStackView()
 
   init() {
@@ -31,6 +32,8 @@ final class OverlayPanel: NSPanel {
 
     chipRow.orientation = .horizontal
     chipRow.spacing = 6
+    variantRow.orientation = .horizontal
+    variantRow.spacing = 4
 
     stack.orientation = .vertical
     stack.alignment = .leading
@@ -42,6 +45,7 @@ final class OverlayPanel: NSPanel {
     hintLabel.layer?.cornerRadius = 4
     stack.addArrangedSubview(ghostLabel)
     stack.addArrangedSubview(chipRow)
+    stack.addArrangedSubview(variantRow)
     stack.addArrangedSubview(hintLabel)
     contentView = stack
   }
@@ -49,7 +53,7 @@ final class OverlayPanel: NSPanel {
   /// Renders the overlay anchored to `anchor` (AppKit screen coordinates). Hides when there is nothing to show.
   func show(
     ghost: String, chips: [(label: String, selected: Bool)], acceptKey: String, anchor: CGRect,
-    working: String? = nil, hint: String? = nil
+    working: String? = nil, hint: String? = nil, variants: [(label: String, selected: Bool)] = []
   ) {
     guard !ghost.isEmpty || !chips.isEmpty || working != nil || hint != nil else {
       orderOut(nil)
@@ -64,9 +68,19 @@ final class OverlayPanel: NSPanel {
       ghostLabel.alphaValue = 1
       chipRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
       chipRow.isHidden = true
+      variantRow.isHidden = true
       place(at: anchor)
       return
     }
+    variantRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    for v in variants { variantRow.addArrangedSubview(VariantPill(label: v.label, selected: v.selected)) }
+    if !variants.isEmpty {
+      let arrows = NSTextField(labelWithString: "← →")
+      arrows.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+      arrows.textColor = .tertiaryLabelColor
+      variantRow.addArrangedSubview(arrows)
+    }
+    variantRow.isHidden = variants.isEmpty
     ghostLabel.stringValue = ghost
     ghostLabel.isHidden = ghost.isEmpty
     ghostLabel.alphaValue = chips.isEmpty ? 1 : 0.6
@@ -118,6 +132,31 @@ final class ChipView: NSView {
     NSLayoutConstraint.activate([
       row.leadingAnchor.constraint(equalTo: leadingAnchor), row.trailingAnchor.constraint(equalTo: trailingAnchor),
       row.topAnchor.constraint(equalTo: topAnchor), row.bottomAnchor.constraint(equalTo: bottomAnchor),
+    ])
+  }
+  required init?(coder: NSCoder) { nil }
+}
+
+/// A destination option under the highlighted chip, e.g. a target currency.
+final class VariantPill: NSView {
+  init(label: String, selected: Bool) {
+    super.init(frame: .zero)
+    wantsLayer = true
+    layer?.cornerRadius = 6
+    layer?.borderWidth = 1
+    layer?.borderColor = (selected ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
+    layer?.backgroundColor =
+      (selected ? NSColor.controlAccentColor.withAlphaComponent(0.18) : NSColor.windowBackgroundColor).cgColor
+    let title = NSTextField(labelWithString: "→ " + label)
+    title.font = NSFont.systemFont(ofSize: 11, weight: selected ? .semibold : .regular)
+    title.textColor = selected ? .labelColor : .secondaryLabelColor
+    title.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(title)
+    NSLayoutConstraint.activate([
+      title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
+      title.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
+      title.topAnchor.constraint(equalTo: topAnchor, constant: 3),
+      title.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
     ])
   }
   required init?(coder: NSCoder) { nil }

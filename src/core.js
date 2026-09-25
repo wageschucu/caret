@@ -165,6 +165,8 @@ export const HOST_TOOLS = Object.freeze({
   'calendar.create': { effect: 'sends-or-pays' },
   // Opens a page in the browser: nothing is sent or changed.
   'url.open': { effect: 'preview-only' },
+  // Looks up a reference exchange rate; only amount and currency codes leave the machine.
+  'fx.convert': { effect: 'preview-only' },
   // Opens a compose window with the draft; nothing is sent until the user does it.
   'mail.draft': { effect: 'reversible' },
 });

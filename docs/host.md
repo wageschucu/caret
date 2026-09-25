@@ -65,6 +65,10 @@ The helper trims, deduplicates, redacts, and caps this exactly as before.
 
 Some effects belong to the host, not the helper: `calendar.create` is performed through EventKit so events land in the user's real calendar; `url.open` opens the browser; `mail.draft` opens a compose window through `mailto:` (or, when the user is already writing in Mail, replaces the typed instruction with the draft body). Tools that need no preview (trusted, preview-only or reversible) are handed off at accept time; the others after confirmation. The gate does not move. On Confirm the host sends `host_tools: ["calendar.create"]`; the helper validates and consumes the single-use confirmation exactly as before, logs it, and answers `status: "host_execute"` with the validated call instead of writing a local record. The host performs it and reports `POST /api/host-executed {id, ok, error}`; Undo deletes the event through EventKit and reports `{id, undone: true}`. A host that does not claim the tool gets the M1 local JSON record as before. Calendar access is requested on first use (`NSCalendarsFullAccessUsageDescription`).
 
+## Variants (destination options)
+
+A skill may declare `metadata.variants: "A|B|C"` and `metadata.variant_slot: "<slot>"`. While its chip is highlighted the overlay shows the options as pills; ← / → cycles them and Tab accepts chip + option, which the host sends as a slot answer. The host orders options: the one named in the sentence, then the user's profile preferences (home currencies), then the rest, leaving out the source named in the sentence. First use: `currency-converter` with destination currencies; the helper's `fx.convert` tool fetches the ECB reference rate (Frankfurter) so the model never invents a rate, and `currencyHints` parses amount/source/destination deterministically.
+
 ## Known limitations
 
 - Apps with poor Accessibility support (some Electron apps, some web views, Java apps) may expose no value or no caret bounds. The host then degrades: buffer from typed keystrokes only, overlay anchored to the window, or nothing. It must never guess text it cannot read.
