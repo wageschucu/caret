@@ -41,6 +41,10 @@ Out of the box Caret runs in demo mode with rule-based routing and a few canned 
 
 When Caret twice declines something it could have done, ⌘⇧N drafts a new skill for you to review.
 
+### Lookups
+
+Some skills may look things up while planning, before the one gated action: read-only, at most three per accept, only for skills that list them, each logged. `draft an email to the contributors of this repo` finds the addresses through your own `gh` login; `reply to Sam's message about the invoice` finds the message in Mail; `schedule a meeting with Sam tomorrow afternoon` reads your calendar and proposes the first free hour; names in a sentence resolve through Contacts. Details in [docs/host.md](docs/host.md).
+
 ## Connect live models
 
 Real behavior comes from three model roles. Set them up in any order; each falls back to demo on its own when unset. If Ollama is running, the two local roles configure themselves from whatever models you already have.
@@ -48,27 +52,31 @@ Real behavior comes from three model roles. Set them up in any order; each falls
 | Role | What it does | Needs | Without it |
 | --- | --- | --- | --- |
 | Router | Decides whether to offer an action, and which | TypeSafe Jev key | Keyword rules, English only |
-| Executor | Writes the draft, translation, summary | Any OpenAI-compatible chat model | Canned examples for a few phrases |
+| Executor | Writes the draft, translation, summary | Anthropic API (recommended, ~2 s) or a local model | Canned examples for a few phrases |
 | Completer | Ghost text while you type | A small, fast local model | Fixed demo phrases |
 
-### 1. Local models (executor and completer)
+### 1. Local models (completer, and executor fallback)
 
 Install the [Ollama app](https://ollama.com/download) and pull one model for each role. Caret never downloads models for you.
 
 ```sh
 ollama pull llama3.2:1b    # completer, 1.3 GB, fast enough for ghost text
-ollama pull llama3.1:8b    # executor, 4.9 GB, 2 to 9 s per draft on an M2
+ollama pull llama3.1:8b    # executor fallback, 4.9 GB, 2 to 9 s per draft on an M2
 ```
 
 That is all the local setup. At startup the helper asks Ollama which models are pulled and uses the smallest for ghost text and the largest for the executor, unless you name models in `.env`. The startup log says which it chose. Set `OLLAMA_AUTODETECT=false` to turn this off.
 
 Use the official app, not a Homebrew build, which may run CPU-only. Any other OpenAI-compatible endpoint works for the executor; set `LLM_API_KEY` too if it is hosted.
 
-### 2. Jev key (router)
+### 2. Hosted executor (recommended)
+
+Drafts, summaries and lookups run 5 to 8 times faster on the Anthropic API: translate 1.6 s instead of 12 s, a reply with a mail lookup about 4 s instead of 20 s. Set `EXECUTOR_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-4-5` and `ANTHROPIC_API_KEY` (or log in once with `ant auth login`). If the API is unavailable (no credits, offline) the helper falls back to the local model and says so in Caret's status line. Only the accepted request, its declared context and lookup results go to the API; ghost text and routing state never do. Any OpenAI-compatible endpoint also works via `LLM_BASE_URL` and `LLM_API_KEY`.
+
+### 3. Jev key (router)
 
 Get a TypeSafe API key. Without it Caret still runs but routes by keywords.
 
-### 3. Write `.env`
+### 4. Write `.env`
 
 ```sh
 cp .env.example .env
@@ -76,6 +84,10 @@ cp .env.example .env
 
 ```dotenv
 TYPESAFE_API_KEY=your-key
+EXECUTOR_PROVIDER=anthropic   # hosted executor; leave empty to run the executor locally
+ANTHROPIC_API_KEY=your-key
+LLM_MODEL=claude-haiku-4-5    # with EXECUTOR_PROVIDER=anthropic; a local model name otherwise
+LLM_FALLBACK_MODEL=llama3.1:8b
 COMPLETER_BUDGET_MS=800      # spec target is 200; a 1B model on an M2 needs about 800
 # Only if you want to override what Ollama detection picked, or use another endpoint:
 LLM_BASE_URL=http://127.0.0.1:11434/v1
@@ -85,7 +97,7 @@ COMPLETER_MODEL=llama3.2:1b
 
 `.env` is gitignored and read only by the helper. Credentials never reach the host app or a browser. Restart the helper after changing it: quit and relaunch Caret, or Ctrl+C and `npm start` again.
 
-### 4. Check it took
+### 5. Check it took
 
 Type a sentence in any app. Ghost text within a second means the completer is live. A chip on `translate into French: hello` means the router is live. Accepting it and getting `Bonjour` rather than a demo notice means the executor is live.
 
@@ -105,6 +117,9 @@ The first request to a cold Ollama model is slow. Type a throwaway sentence to w
 | Preview | Enter in card / second Tab | Confirm an action once all slots are filled |
 | Preview | Esc | Cancel and return to typing |
 | Terminals and IDEs | Ctrl+Space | Alternate accept binding, per app in Settings |
+| Chip with options | ← / → | Choose an option, e.g. the currency to convert to |
+| Chip with a style row | ⌥← / ⌥→ | Choose the result style, e.g. value only or with rate |
+| No skill fits | ⌘⇧N | Draft a new skill from the sentence |
 
 If the OS reserves Ctrl+Right (for example for switching desktops), Alt+Right also accepts the next ghost word. Enter never accepts the first chip. Inputs using IME composition do not trigger completion or routing until composition ends.
 
@@ -112,9 +127,17 @@ If the OS reserves Ctrl+Right (for example for switching desktops), Alt+Right al
 
 Screen context is supplied by the host, never fetched by the helper. The native macOS host reads the focused field, selection, and recent windows through the Accessibility API (see [docs/host.md](docs/host.md)). The browser host has no access to other windows; its context settings support pasted focused-window text, selected text, an app deny list, and pause. Screenpipe was removed on 2026-09-24: it is unnecessary once the host has Accessibility access, and its continuous recording is costly.
 
-The helper trims/deduplicates context, removes common secret patterns, and caps serialized state at 4,000 UTF-8 bytes as a conservative token bound. A secure or denied host field returns empty state. Only a skill's declared context reaches the executor. Screen text is labeled untrusted reference data.
+The helper trims/deduplicates context, removes common secret patterns, and caps serialized state at 8,000 UTF-8 bytes as a conservative token bound. A secure or denied host field returns empty state. Only a skill's declared context reaches the executor. Screen text is labeled untrusted reference data.
 
 The application, not the model, owns permissions. Tool effects cannot be downgraded by skill metadata. Sends/pays and destructive classes require an exact preview and a single-use confirmation. Reviewed skills force preview; untrusted skills cannot access side-effecting tools. Arbitrary scripts and shell commands are unavailable in this build.
+
+### What leaves your Mac
+
+- **Routing (Jev, TypeSafe):** the text before the caret plus trimmed context, on each pause in typing, when a key is set.
+- **Executor (Anthropic API):** only when you accept a chip: the sentence, the context the skill declares, your profile facts and lookup results.
+- **Currency:** the amount and the two currency codes, to frankfurter.app.
+- **GitHub lookups:** read-only API calls through your own `gh` login.
+- Ghost text, the mail index, Contacts and calendar data stay on the machine; the mail search needs Full Disk Access and sends at most three matched messages' text to the executor for that request.
 
 Local files are created exclusively without overwriting existing files. Undo only removes an unchanged result from the same session. The server binds to loopback and validates Host, Origin, JSON content type, and a per-session token. It is a local application, not an internet-facing service.
 
@@ -181,5 +204,6 @@ This is an M1 core plus the first M2 pieces, and a usable local prototype. It do
 ### Done and next
 
 - Done: native macOS host; unknown-intent proposal (⌘⇧N, saved as *reviewed*, hot-reloaded); debug view with per-sentence probabilities; registry history and rollback.
-- Next: live-model validation, measuring the ghost-text budget and routing accuracy with real models and growing the labeled eval set from recorded events.
+- Done: live models measured (Jev 22/22 on the seed set plus real labeled states; local ghost text 50 to 250 ms warm; executor on Haiku 4.5); lookups for Contacts, GitHub, calendar and mail; hosted executor with local fallback.
+- Next: grow the labeled eval set from real use (`npm run label`) and tune thresholds from it; notarization for sharing the app.
 - Later: other hosts sharing the same helper. Windows (UI Automation), Linux (AT-SPI), phone (keyboard extension or share target).
