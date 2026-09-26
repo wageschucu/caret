@@ -547,6 +547,57 @@ export async function convertCurrency({ amount, from, to, style = 'compact' }, {
 
 // Ollama unloads idle models after five minutes; the first request afterwards pays a multi-second
 // reload. Keep the completer and executor resident while the helper runs.
+// Which models Ollama already has, so a machine with Ollama but no model settings still gets live
+// ghost text and a live executor. Never pulls anything: the choice is limited to what is on disk.
+// Embedding and reranker models are skipped; they cannot chat.
+export async function detectLocalModels({ fetcher = fetch, timeoutMs = 1500 } = {}) {
+  if (!isOllama()) return null;
+  let data;
+  try {
+    const r = await fetcher(baseURL().replace(/\/v1$/, '') + '/api/tags', { signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) return null;
+    data = await r.json();
+  } catch {
+    return null;
+  }
+  const models = (data?.models || [])
+    .filter((m) => m?.name && Number.isFinite(m.size) && !/embed|bge|minilm|rerank/i.test(m.name))
+    .map((m) => ({ name: m.name, size: m.size }))
+    .sort((a, b) => a.size - b.size);
+  // Ghost text wants the smallest model on the machine; planning wants the largest.
+  return { models, completer: models[0]?.name || null, executor: models.at(-1)?.name || null };
+}
+
+// Model settings filled from Ollama at startup, keyed by variable name; empty when everything came
+// from .env. Read by the bootstrap response so the host can say where its models came from.
+export const detectedDefaults = {};
+
+// Fill empty model settings from what Ollama has. Anything set in .env is left alone, and
+// OLLAMA_AUTODETECT=false turns the probe off. Returns what was wanted, what was filled, and
+// whether Ollama answered (null when nothing needed filling and no probe was made).
+export async function applyLocalDefaults(options = {}) {
+  const env = process.env,
+    hosted = env.EXECUTOR_PROVIDER === 'anthropic';
+  const wanted = [];
+  // With a hosted executor LLM_MODEL is a Claude id, so the completer cannot borrow it.
+  if (!env.COMPLETER_MODEL && (!env.LLM_MODEL || hosted)) wanted.push('COMPLETER_MODEL');
+  if (!env.LLM_MODEL && !hosted) wanted.push('LLM_MODEL');
+  if (!env.LLM_FALLBACK_MODEL) wanted.push('LLM_FALLBACK_MODEL');
+  const filled = {};
+  if (!wanted.length || env.OLLAMA_AUTODETECT === 'false') return { wanted, filled, reachable: null };
+  const found = await detectLocalModels(options);
+  if (!found) return { wanted, filled, reachable: false };
+  for (const name of wanted) {
+    const model = name === 'COMPLETER_MODEL' ? found.completer : found.executor;
+    if (model) {
+      env[name] = model;
+      filled[name] = model;
+      detectedDefaults[name] = model;
+    }
+  }
+  return { wanted, filled, reachable: true };
+}
+
 export function keepModelsWarm({ fetcher = fetch, intervalMs = 4 * 60 * 1000 } = {}) {
   if (!isOllama()) return null;
   const executorLocal = process.env.EXECUTOR_PROVIDER !== 'anthropic';

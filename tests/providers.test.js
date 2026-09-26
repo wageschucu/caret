@@ -184,3 +184,132 @@ test('argument strings with raw newlines inside values are repaired', async () =
   );
   assert.equal(JSON.parse(r.text).calls[0].args.body, 'Dear Sam,\nthanks\n\nBest,\nPaul');
 });
+
+import { detectLocalModels, applyLocalDefaults, detectedDefaults } from '../src/providers.js';
+const MODEL_VARS = [
+  'COMPLETER_MODEL',
+  'LLM_MODEL',
+  'LLM_BASE_URL',
+  'LLM_FALLBACK_MODEL',
+  'EXECUTOR_PROVIDER',
+  'OLLAMA_AUTODETECT',
+];
+async function withEnv(values, fn) {
+  const saved = Object.fromEntries(MODEL_VARS.map((k) => [k, process.env[k]]));
+  for (const k of MODEL_VARS) delete process.env[k];
+  Object.assign(process.env, values);
+  for (const k of Object.keys(detectedDefaults)) delete detectedDefaults[k];
+  try {
+    return await fn();
+  } finally {
+    for (const k of MODEL_VARS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    for (const k of Object.keys(detectedDefaults)) delete detectedDefaults[k];
+  }
+}
+const tags = (models) => async (url) => {
+  tags.url = url;
+  return { ok: true, json: async () => ({ models }) };
+};
+test('ollama probe picks the smallest model for ghost text and the largest for planning, skipping embeddings', () =>
+  withEnv({}, async () => {
+    const fetcher = tags([
+      { name: 'llama3.1:8b', size: 4_900_000_000 },
+      { name: 'nomic-embed-text', size: 200_000_000 },
+      { name: 'llama3.2:1b', size: 1_300_000_000 },
+    ]);
+    const found = await detectLocalModels({ fetcher });
+    assert.equal(tags.url, 'http://127.0.0.1:11434/api/tags');
+    assert.equal(found.completer, 'llama3.2:1b');
+    assert.equal(found.executor, 'llama3.1:8b');
+    assert.deepEqual(
+      found.models.map((m) => m.name),
+      ['llama3.2:1b', 'llama3.1:8b']
+    );
+  }));
+test('ollama probe returns null when Ollama is down or the endpoint is not Ollama', () =>
+  withEnv({}, async () => {
+    assert.equal(
+      await detectLocalModels({
+        fetcher: async () => {
+          throw Error('ECONNREFUSED');
+        },
+      }),
+      null
+    );
+    process.env.LLM_BASE_URL = 'https://api.example.test/v1';
+    let called = false;
+    assert.equal(
+      await detectLocalModels({
+        fetcher: async () => {
+          called = true;
+        },
+      }),
+      null
+    );
+    assert.equal(called, false, 'a non-Ollama endpoint is never probed');
+  }));
+test('local defaults fill only empty settings and never override .env', () =>
+  withEnv({ LLM_MODEL: 'my-choice:7b' }, async () => {
+    const fetcher = tags([
+      { name: 'big:70b', size: 40e9 },
+      { name: 'small:1b', size: 1e9 },
+    ]);
+    const r = await applyLocalDefaults({ fetcher });
+    assert.equal(process.env.LLM_MODEL, 'my-choice:7b');
+    // The completer borrows LLM_MODEL when it is local, so it is not wanted here.
+    assert.deepEqual(r.wanted, ['LLM_FALLBACK_MODEL']);
+    assert.deepEqual(r.filled, { LLM_FALLBACK_MODEL: 'big:70b' });
+    assert.deepEqual(detectedDefaults, { LLM_FALLBACK_MODEL: 'big:70b' });
+  }));
+test('local defaults fill everything on a machine with Ollama and no .env', () =>
+  withEnv({}, async () => {
+    const fetcher = tags([
+      { name: 'big:70b', size: 40e9 },
+      { name: 'small:1b', size: 1e9 },
+    ]);
+    const r = await applyLocalDefaults({ fetcher });
+    assert.equal(r.reachable, true);
+    assert.deepEqual(r.filled, { COMPLETER_MODEL: 'small:1b', LLM_MODEL: 'big:70b', LLM_FALLBACK_MODEL: 'big:70b' });
+    assert.equal(process.env.COMPLETER_MODEL, 'small:1b');
+    assert.equal(process.env.LLM_MODEL, 'big:70b');
+  }));
+test('a hosted executor keeps its Claude id but gets a local completer and fallback', () =>
+  withEnv({ EXECUTOR_PROVIDER: 'anthropic', LLM_MODEL: 'claude-haiku-4-5-20251001' }, async () => {
+    const fetcher = tags([
+      { name: 'big:8b', size: 5e9 },
+      { name: 'small:1b', size: 1e9 },
+    ]);
+    const r = await applyLocalDefaults({ fetcher });
+    assert.deepEqual(r.wanted, ['COMPLETER_MODEL', 'LLM_FALLBACK_MODEL']);
+    assert.equal(process.env.LLM_MODEL, 'claude-haiku-4-5-20251001');
+    assert.equal(process.env.COMPLETER_MODEL, 'small:1b');
+    assert.equal(process.env.LLM_FALLBACK_MODEL, 'big:8b');
+  }));
+test('local defaults report demo mode when Ollama is down, and stay off when disabled', () =>
+  withEnv({}, async () => {
+    const down = async () => {
+      throw Error('ECONNREFUSED');
+    };
+    let r = await applyLocalDefaults({ fetcher: down });
+    assert.equal(r.reachable, false);
+    assert.deepEqual(r.filled, {});
+    assert.equal(process.env.LLM_MODEL, undefined);
+    process.env.OLLAMA_AUTODETECT = 'false';
+    let probed = false;
+    r = await applyLocalDefaults({
+      fetcher: async () => {
+        probed = true;
+      },
+    });
+    assert.equal(probed, false);
+    assert.equal(r.reachable, null);
+  }));
+test('ollama with only embedding models fills nothing', () =>
+  withEnv({}, async () => {
+    const r = await applyLocalDefaults({ fetcher: tags([{ name: 'nomic-embed-text', size: 2e8 }]) });
+    assert.equal(r.reachable, true);
+    assert.deepEqual(r.filled, {});
+  }));

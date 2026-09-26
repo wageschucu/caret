@@ -43,7 +43,7 @@ When Caret twice declines something it could have done, ⌘⇧N drafts a new ski
 
 ## Connect live models
 
-Real behavior comes from three model roles. Set them up in any order; each falls back to demo on its own when unset.
+Real behavior comes from three model roles. Set them up in any order; each falls back to demo on its own when unset. If Ollama is running, the two local roles configure themselves from whatever models you already have.
 
 | Role | What it does | Needs | Without it |
 | --- | --- | --- | --- |
@@ -53,12 +53,14 @@ Real behavior comes from three model roles. Set them up in any order; each falls
 
 ### 1. Local models (executor and completer)
 
-Install the [Ollama app](https://ollama.com/download) and pull one model for each role. Nothing is downloaded for you.
+Install the [Ollama app](https://ollama.com/download) and pull one model for each role. Caret never downloads models for you.
 
 ```sh
 ollama pull llama3.2:1b    # completer, 1.3 GB, fast enough for ghost text
 ollama pull llama3.1:8b    # executor, 4.9 GB, 2 to 9 s per draft on an M2
 ```
+
+That is all the local setup. At startup the helper asks Ollama which models are pulled and uses the smallest for ghost text and the largest for the executor, unless you name models in `.env`. The startup log says which it chose. Set `OLLAMA_AUTODETECT=false` to turn this off.
 
 Use the official app, not a Homebrew build, which may run CPU-only. Any other OpenAI-compatible endpoint works for the executor; set `LLM_API_KEY` too if it is hosted.
 
@@ -74,10 +76,11 @@ cp .env.example .env
 
 ```dotenv
 TYPESAFE_API_KEY=your-key
+COMPLETER_BUDGET_MS=800      # spec target is 200; a 1B model on an M2 needs about 800
+# Only if you want to override what Ollama detection picked, or use another endpoint:
 LLM_BASE_URL=http://127.0.0.1:11434/v1
 LLM_MODEL=llama3.1:8b
 COMPLETER_MODEL=llama3.2:1b
-COMPLETER_BUDGET_MS=800      # spec target is 200; a 1B model on an M2 needs about 800
 ```
 
 `.env` is gitignored and read only by the helper. Credentials never reach the host app or a browser. Restart the helper after changing it: quit and relaunch Caret, or Ctrl+C and `npm start` again.
@@ -86,7 +89,7 @@ COMPLETER_BUDGET_MS=800      # spec target is 200; a 1B model on an M2 needs abo
 
 Type a sentence in any app. Ghost text within a second means the completer is live. A chip on `translate into French: hello` means the router is live. Accepting it and getting `Bonjour` rather than a demo notice means the executor is live.
 
-If the router silently stays in demo mode, look for `Routing uses demo rules` in `~/Library/Logs/Caret/helper.log` or the terminal. A rejected key logs once and the session continues on rules. If the documented Jev endpoint returns 401, set `JEV_ENDPOINT` to the one your account uses.
+The startup log names the models in use, or says `Ollama is not running` when it fell back to demo. If the router silently stays in demo mode, look for `Routing uses demo rules` in `~/Library/Logs/Caret/helper.log` or the terminal. A rejected key logs once and the session continues on rules. If the documented Jev endpoint returns 401, set `JEV_ENDPOINT` to the one your account uses.
 
 The first request to a cold Ollama model is slow. Type a throwaway sentence to warm it up.
 

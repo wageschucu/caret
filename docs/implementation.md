@@ -61,3 +61,5 @@ M3: catalog embeddings/health/vetting/adoption, reviewed-script sandbox, large-r
 Before M2: the native macOS host ([host.md](host.md)) and live-model validation.
 
 No code path claims these later milestones are present. Scripts remain blocked, external calendars/email/purchases are not connected, and registries above the live cap return an actionable error. The initial skill bundle is loaded directly from the project to avoid modifying a user-global registry; a future installer can copy it into `~/.skillrouter/skills`.
+
+2026-09-25: empty model settings are filled at startup from Ollama's `/api/tags` (`applyLocalDefaults` in `providers.js`): smallest chat model for the completer, largest for the executor and for `LLM_FALLBACK_MODEL`; embedding and reranker models are skipped. Values set in `.env` are never overridden, a hosted executor keeps its Claude id, and `OLLAMA_AUTODETECT=false` disables the probe. Nothing is pulled; a machine without Ollama still gets demo mode, now with a one-line startup warning. The bootstrap response carries `completer_model` and `detected_models` so a host can show where its models came from.

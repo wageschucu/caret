@@ -5,7 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { loadRegistry, registryHash, parseSkill } from './registry.js';
 import { trimState, RouteSession, THRESHOLDS, ABSTAIN, hash, redact } from './core.js';
-import { route, streamCompletion, draftSkill, keepModelsWarm, hostedExecutorProblem } from './providers.js';
+import {
+  route,
+  streamCompletion,
+  draftSkill,
+  keepModelsWarm,
+  applyLocalDefaults,
+  detectedDefaults,
+  hostedExecutorProblem,
+} from './providers.js';
 import { prepare, Executions } from './executor.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSION_TTL = 86400000;
@@ -104,6 +112,8 @@ export async function createApp({
           mode: process.env.TYPESAFE_API_KEY && !jevAuthError ? 'live' : 'demo',
           executor: process.env.LLM_MODEL ? 'live' : 'demo',
           executor_model: process.env.LLM_MODEL || null,
+          completer_model: process.env.COMPLETER_MODEL || process.env.LLM_MODEL || null,
+          detected_models: detectedDefaults,
           executor_fallback: hostedExecutorProblem,
           warning: jevAuthError,
           problems,
@@ -479,6 +489,24 @@ export async function createApp({
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const server = await createApp();
+  // Empty model settings are filled from the models Ollama already has; nothing is downloaded.
+  const local = await applyLocalDefaults();
+  if (Object.keys(local.filled).length)
+    console.log(
+      'Using local models Ollama already has: ' +
+        Object.entries(local.filled)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(', ') +
+        '. Set them in .env to choose differently.'
+    );
+  const roles = { COMPLETER_MODEL: 'ghost text', LLM_MODEL: 'the executor' };
+  const stillDemo = local.wanted.filter((k) => !local.filled[k] && roles[k]).map((k) => roles[k]);
+  if (stillDemo.length && local.reachable !== null)
+    console.warn(
+      (local.reachable ? 'Ollama has no chat models pulled' : 'Ollama is not running') +
+        `; ${stillDemo.join(' and ')} ${stillDemo.length > 1 ? 'stay' : 'stays'} in demo mode. ` +
+        'Pull a model (see README) or set the model in .env.'
+    );
   keepModelsWarm();
   server.listen(Number(process.env.PORT) || 4317, '127.0.0.1', () =>
     console.log(`SkillRouter: http://127.0.0.1:${server.address().port}`)
