@@ -43,11 +43,26 @@ final class ContactsBridge {
   /// "Full Name <address>" lines for contacts whose name matches, at most three per name.
   func lookup(_ names: [String]) async -> [String] {
     guard !names.isEmpty, (try? await ensureAccess()) == true else { return [] }
-    let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactEmailAddressesKey] as [CNKeyDescriptor]
+    let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactNicknameKey, CNContactEmailAddressesKey] as [CNKeyDescriptor]
     var lines: [String] = []
     for name in names {
       let predicate = CNContact.predicateForContacts(matchingName: name)
-      guard let contacts = try? store.unifiedContacts(matching: predicate, keysToFetch: keys) else { continue }
+      var contacts = (try? store.unifiedContacts(matching: predicate, keysToFetch: keys)) ?? []
+      if contacts.filter({ !$0.emailAddresses.isEmpty }).isEmpty {
+        // Apple's matcher ignores nicknames and needs a prefix; scan given, family and nickname ourselves.
+        let needle = name.lowercased()
+        var scanned: [CNContact] = []
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        try? store.enumerateContacts(with: request) { c, stop in
+          if c.emailAddresses.isEmpty { return }
+          let fields = [c.givenName, c.familyName, c.nickname].map { $0.lowercased() }
+          if fields.contains(where: { $0.hasPrefix(needle) || $0.contains(" " + needle) || $0 == needle }) {
+            scanned.append(c)
+            if scanned.count >= 3 { stop.pointee = true }
+          }
+        }
+        contacts = scanned
+      }
       for contact in contacts.prefix(3) where !contact.emailAddresses.isEmpty {
         let full = [contact.givenName, contact.familyName].filter { !$0.isEmpty }.joined(separator: " ")
         for email in contact.emailAddresses.prefix(2) {
