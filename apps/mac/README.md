@@ -41,6 +41,10 @@ Recent-window context is **off** by default (menu → "Include recent windows as
 - `apps/mac/build.sh --install` copies the app to `/Applications` and launches it from there; point "Launch Caret at login" at that copy. The helper still runs from this repository (path embedded at build time).
 - `apps/mac/notarize.sh` signs with a Developer ID certificate, notarizes and staples, for sharing the app with other Macs. It needs an Apple Developer Program membership, a "Developer ID Application" certificate, and `xcrun notarytool store-credentials caret-notary` done once; see the script header. For personal use the self-signed "Caret Dev" build is sufficient.
 
+## Mail search
+
+Replies in context (“reply to Sam's message about the invoice”) use a `mail.search` lookup over Caret's own index of Apple Mail's message files. It needs **Full Disk Access** for Caret (System Settings → Privacy & Security → Full Disk Access); the index (`~/Library/Application Support/Caret/mail-index.json`: sender, subject, date, path per message, no bodies) is built at first launch (a few minutes for 150k messages) and refreshed every ten minutes. Message text is read only for the matches (three at most, 1,500 characters each) and sent to the executor for that request only. Apple Mail need not be the default client; its accounts must be configured so the messages exist on disk.
+
 ## Settings
 
 Menu → **Settings…** (⌘,): helper address, recent-window context, launch at login, the deny list and the Tab-native app list (with an "Add app…" picker), and **About you**: name, email, sign-off and free-form notes (role, language, tone). The profile is sent to the helper only when you accept a skill, goes to the executor as user-provided facts for names, sign-offs and addresses, and is never sent to the router or written to the helper's logs.
