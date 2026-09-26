@@ -6,3 +6,4 @@ output/
 apps/mac/.build/
 apps/mac/build/
 apps/mac/Resources/Caret.iconset/
+eval/states.local.jsonl

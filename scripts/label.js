@@ -12,7 +12,7 @@ import { stdin, stdout } from 'node:process';
 import { loadRegistry, registryHash } from '../src/registry.js';
 
 const EVENTS = '.skillrouter/events.jsonl',
-  DATASET = 'eval/states.jsonl';
+  DATASET = 'eval/states.local.jsonl'; // real sentences stay out of the repository
 const all = process.argv.includes('--all');
 const skills = (await loadRegistry('skills')).filter((s) => s.active),
   slugs = skills.map((s) => s.slug);

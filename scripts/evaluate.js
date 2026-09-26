@@ -4,10 +4,19 @@ import { trimState, selectRoute, THRESHOLDS, ABSTAIN, hash } from '../src/core.j
 import { route, demoRoute } from '../src/providers.js';
 const args = process.argv.slice(2),
   value = (key, fallback) => (args.includes(key) ? args[args.indexOf(key) + 1] : fallback);
+// Real labeled states live in eval/states.local.jsonl (gitignored) and are included automatically.
 const file = value('--dataset', 'eval/states.jsonl'),
+  localFile = 'eval/states.local.jsonl',
   live = args.includes('--live');
 if (live && !process.env.TYPESAFE_API_KEY) throw Error('--live requires TYPESAFE_API_KEY');
-const rows = (await fs.readFile(file, 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
+const rows = [
+  ...(await fs.readFile(file, 'utf8')).trim().split('\n'),
+  ...(value('--dataset', null)
+    ? []
+    : (await fs.readFile(localFile, 'utf8').catch(() => '')).trim().split('\n')),
+]
+  .filter(Boolean)
+  .map(JSON.parse);
 const skills = (await loadRegistry('skills')).filter((s) => s.active);
 const confusion = {},
   languages = {},

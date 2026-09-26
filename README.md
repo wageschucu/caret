@@ -191,7 +191,7 @@ Live evaluation makes billable Jev requests. A baseline comparison exits unsucce
 
 To grow the labeled set from your own use:
 
-1. `npm run label` walks the distinct sentences in `.skillrouter/events.jsonl` that are not yet in the dataset, proposes the accepted or offered skill, and appends each state with its recorded probabilities.
+1. `npm run label` walks the distinct sentences in `.skillrouter/events.jsonl` that are not yet in the dataset, proposes the accepted or offered skill, and appends each state with its recorded probabilities to `eval/states.local.jsonl`, which is gitignored: your real sentences never enter the repository. `npm run eval` reads both files.
 2. `npm run eval` then replays those states offline. States recorded under an older registry are skipped (`stale_skipped`) until `--live` re-evaluates them; any registry, model, or description change needs `--live` for fresh probabilities.
 3. Hand-checked JSONL entries with `state`, `label` (a skill slug or `NO_ROUTE`), and `language` can be added directly.
 
