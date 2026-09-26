@@ -89,6 +89,7 @@ final class Controller {
     ) { [weak self] _ in Task { @MainActor in self?.appSwitched() } }
     Task { await connect() }
     waitForTrust()
+    mail.refreshInBackground()  // builds Caret's mail header index once; later refreshes are incremental
     // Recent-window capture: a page the user only reads never triggers a keystroke, so poll slowly.
     Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
       guard let self, Settings.screenContext, !Settings.paused else { return }
