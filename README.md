@@ -16,6 +16,20 @@ Grant Accessibility when asked. Then type in any app:
 - `draft an email thanking the team` → Tab → draft opens in your mail client
 - `thank you` → ghost phrase appears → Tab accepts it, Ctrl+→ takes one word
 
+Keys, once something is showing at the caret:
+
+| Key | Does |
+| --- | --- |
+| Tab | Accept the chip; with no chip, insert the ghost phrase |
+| Ctrl+→ (or Alt+→) | Insert the next ghost word; never runs a skill |
+| ↑ / ↓ | Switch between two chips |
+| ← / → | Pick an option under the chip, e.g. the currency to convert to |
+| ⌥← / ⌥→ | Pick the result style, e.g. value only or with rate |
+| Esc | Dismiss chips and ghost text |
+| Enter | Only in a preview window; never accepts a chip |
+| Ctrl+Space | Accept in terminals and IDEs, where Tab is native |
+| ⌘⇧N | Draft a new skill when nothing fits (offered after two declines) |
+
 Out of the box Caret runs in demo mode with rule-based routing and a few canned results. See [Connect live models](#connect-live-models) to make it real.
 
 ## What it does
