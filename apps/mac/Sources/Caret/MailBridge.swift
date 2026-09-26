@@ -36,10 +36,19 @@ final class MailBridge {
   private var building = false
   private let queue = DispatchQueue(label: "caret.mailindex", qos: .utility)
 
-  /// Builds or refreshes the index in the background (at launch; searches refresh again first).
+  private var timer: Timer?
+
+  /// Builds the index at launch and refreshes it every ten minutes; searches never wait for a walk.
   func refreshInBackground() {
     guard Self.hasAccess else { return }
     queue.async { [self] in self.refreshSync() }
+    DispatchQueue.main.async { [self] in
+      timer?.invalidate()
+      timer = Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { [weak self] _ in
+        guard let self, Self.hasAccess else { return }
+        self.queue.async { self.refreshSync() }
+      }
+    }
   }
 
   private func refreshSync() {
@@ -89,7 +98,7 @@ final class MailBridge {
     guard !words.isEmpty else { throw BridgeError(message: "Nothing to search for.") }
     let snapshot: [Entry] = await withCheckedContinuation { continuation in
       queue.async { [self] in
-        self.refreshSync()
+        if !self.loaded { self.refreshSync() }  // first search before the launch build finished
         continuation.resume(returning: Array(self.entries.values))
       }
     }
