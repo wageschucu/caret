@@ -30,7 +30,6 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
   <key>NSHumanReadableCopyright</key><string>MIT</string>
   <key>CFBundleIconFile</key><string>Caret</string>
   <key>CaretHelperRepo</key><string>__REPO__</string>
-  <key>NSAppleEventsUsageDescription</key><string>Caret searches your recent Mail messages when you ask it to reply to one. Nothing is sent or changed in Mail.</string>
   <key>NSContactsUsageDescription</key><string>Caret looks up people you name when drafting an email, so the address is filled in. Matches stay on this Mac.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Caret adds events you confirm to your calendar, and removes them when you press Undo.</string>
 </dict>

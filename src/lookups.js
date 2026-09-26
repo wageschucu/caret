@@ -23,7 +23,7 @@ export const LOOKUPS = Object.freeze({
     where: 'host',
     schema: '{"query": string}',
     describe:
-      "recent inbox messages in the user's mail client whose sender or subject contains the query: from, date, subject and the beginning of the text of up to three messages; use it when the sentence refers to a message or a reply",
+      "the user's mail messages whose sender or subject contains any word of the query (a name, a company, a topic): from, date, subject and the beginning of the text of up to three messages, newest first; use it when the sentence refers to a message or a reply",
   },
   'github.contributors': {
     where: 'helper',
