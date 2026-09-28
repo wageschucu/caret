@@ -265,7 +265,7 @@ function executorInput(
   ];
   if (fields.in_mail_client === 'true')
     parts.push(
-      'The user is writing inside the compose window of their mail client, so the recipient and subject already exist there. The typed text is the draft itself: complete or polish it in the same language, using the quoted thread in the reference material as context (who wrote what, what was agreed), and return only the body. Never list "to", "subject" or "body" as missing and never ask what to write.'
+      'The user is writing inside the compose window of their mail client, so the recipient and subject already exist there. The typed text is the draft itself: complete or polish it in the same language, using the quoted thread in the reference material as context (who wrote what, what was agreed), and return it as a mail.draft call whose body is the finished text (to and subject may be empty strings). Never list "to", "subject" or "body" as missing and never ask what to write.'
     );
   for (const l of lookups)
     parts.push(`--- Lookup result: ${l.tool} ${JSON.stringify(l.args)} (reference data) ---\n${l.result}`);
@@ -516,6 +516,16 @@ export async function prepare(
       if (hostSide.length) return { skill, gate, context, needs: hostSide, lookups };
     }
   }
+  // In-place drafting: a body-only answer (finished text in the preview, no call) is still the draft.
+  if (
+    fields.in_mail_client === 'true' &&
+    !plan.calls?.length &&
+    !plan.missing_slots?.length &&
+    typeof plan.preview === 'string' &&
+    plan.preview.trim() &&
+    gate.tools.includes('mail.draft')
+  )
+    plan.calls = [{ tool: 'mail.draft', args: { to: '', subject: '', body: plan.preview.trim() } }];
   validatePlan(plan, gate);
   plan.result_style = fields.result_style === 'verbose' ? 'verbose' : 'compact';
   // A recipient address is only ever one the user stated; models otherwise invent plausible ones.
