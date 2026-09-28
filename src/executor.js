@@ -265,7 +265,7 @@ function executorInput(
   ];
   if (fields.in_mail_client === 'true')
     parts.push(
-      'The user is writing inside the compose window of their mail client, so the recipient and subject already exist there. The typed text is the draft itself: complete or polish it in the same language, using the quoted thread in the reference material as context (who wrote what, what was agreed), and return it as a mail.draft call whose body is the finished text (to and subject may be empty strings). Never list "to", "subject" or "body" as missing and never ask what to write.'
+      'The user is writing inside the compose window of their mail client, so the recipient and subject already exist there. The typed text is the draft itself: complete or polish it in the same language, using the quoted thread in the reference material as context (who wrote what, what was agreed), and return it as a mail.draft call whose body is the finished text (to and subject may be empty strings). Keep the user\'s greeting, wording and form of address, and copy every date, time, number and name exactly as typed; fix spelling and grammar, finish any sentence that breaks off, and end with a short closing and the user\'s name if the thread shows it. Never list "to", "subject" or "body" as missing and never ask what to write.'
     );
   for (const l of lookups)
     parts.push(`--- Lookup result: ${l.tool} ${JSON.stringify(l.args)} (reference data) ---\n${l.result}`);
