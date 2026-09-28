@@ -341,7 +341,15 @@ export function currencyHints(buffer, fields = {}, profile = {}) {
 
 /// `lookups` are results already obtained (helper- or host-side) for this accept, in order.
 /// `progress(text)` reports planning stages to the caller (streamed to the host).
-export async function prepare(skill, state, fields = {}, profile = {}, lookups = [], progress = () => {}) {
+export async function prepare(
+  skill,
+  state,
+  fields = {},
+  profile = {},
+  lookups = [],
+  progress = () => {},
+  { forceFinal = false } = {}
+) {
   const gate = permission(skill),
     context = forwardContext(skill, state);
   const lookupTools = gate.tools.filter(isLookup);
@@ -376,6 +384,7 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
           tool: 'contacts.lookup',
           args: { name },
           result: hits.length ? hits.join('\n') : `No contacts match “${name}”`,
+          seeded: true,
         });
       }
     }
@@ -383,7 +392,9 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
     let optionalNote = null;
     let conflictNote = null;
     // Only lookups the model asks for count against the budget; pre-answered ones from the host are free.
-    let requestedCount = 0;
+    // Host rounds re-enter here with the lookups so far, so the count is derived from them.
+    let requestedCount = lookups.filter((l) => !l.seeded).length;
+    if (forceFinal) finalOnly = true;
     for (let round = 0; ; round++) {
       progress(
         round === 0

@@ -322,8 +322,14 @@ export async function createApp({
         res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
         const emit = (obj) => res.write(JSON.stringify(obj) + '\n');
         try {
-          const prepared = await prepare(skill, acceptedState, body.fields || {}, profile, lookups, (text) =>
-            emit({ progress: text })
+          const prepared = await prepare(
+            skill,
+            acceptedState,
+            body.fields || {},
+            profile,
+            lookups,
+            (text) => emit({ progress: text }),
+            { forceFinal: body.final === true }
           );
           if (prepared.needs) {
             await log({

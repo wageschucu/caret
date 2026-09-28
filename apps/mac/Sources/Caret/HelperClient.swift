@@ -179,11 +179,11 @@ final class HelperClient {
   /// Streams planning progress lines (`onProgress`) and returns the final object.
   func prepare(
     eventID: String, skill: String, buffer: String, fields: [String: String], previous: String?,
-    lookups: [[String: Any]] = [], onProgress: @escaping (String) -> Void = { _ in }
+    lookups: [[String: Any]] = [], final: Bool = false, onProgress: @escaping (String) -> Void = { _ in }
   ) async throws -> Execution {
     var body: [String: Any] = [
       "event_id": eventID, "skill": skill, "accepted_buffer": buffer, "fields": fields, "host_tools": Self.hostTools,
-      "profile": Settings.profile, "lookups": lookups,
+      "profile": Settings.profile, "lookups": lookups, "final": final,
     ]
     if let previous { body["previous_preview"] = previous }
     var (bytes, response) = try await session.bytes(for: try request("prepare", body))

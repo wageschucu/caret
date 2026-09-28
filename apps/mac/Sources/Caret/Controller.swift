@@ -539,9 +539,13 @@ final class Controller {
           render()
           execution = try await client.prepare(
             eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil, lookups: lookups,
-            onProgress: progress)
+            final: rounds >= 2, onProgress: progress)  // last round: finish with what has been gathered
         }
-        await show(execution)
+        if execution.status == "needs" {
+          previewPanel.showError("Caret could not finish this after several lookups. Try a more specific sentence.")
+        } else {
+          await show(execution)
+        }
       } catch {
         Diagnostics.log("prepare failed for \(skill): \(error.localizedDescription)")
         previewPanel.showError(error.localizedDescription)
