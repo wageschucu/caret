@@ -493,6 +493,8 @@ final class Controller {
       do {
         // Skills that draft mail get the address-book matches for names in the sentence.
         if client.skill(skill)?.allowed_tools?.contains("mail.draft") == true {
+          // Inside a mail client the draft is written in place; recipient and subject are already there.
+          if let app = snapshot?.bundleID, Self.mailClients.contains(app) { fields["in_mail_client"] = "true" }
           let names = ContactsBridge.names(in: buffer)
           let matches = await contacts.lookup(names)
           if !matches.isEmpty { fields["contacts"] = matches.joined(separator: "\n") }

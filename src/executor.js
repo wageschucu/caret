@@ -263,6 +263,10 @@ function executorInput(
     `Now: ${iso} (${now.toLocaleDateString('en-US', { weekday: 'long' })}, ${zone}). Resolve relative dates from this.`,
     `User typed: ${JSON.stringify(context.buffer || '')}`,
   ];
+  if (fields.in_mail_client === 'true')
+    parts.push(
+      'The user is writing inside the compose window of their mail client, so the recipient and subject already exist there. The typed text is the draft itself: complete or polish it in the same language, using the quoted thread in the reference material as context (who wrote what, what was agreed), and return only the body. Never list "to", "subject" or "body" as missing and never ask what to write.'
+    );
   for (const l of lookups)
     parts.push(`--- Lookup result: ${l.tool} ${JSON.stringify(l.args)} (reference data) ---\n${l.result}`);
   if (finalOnly)
@@ -276,7 +280,9 @@ function executorInput(
       `These details are unknown and optional, not missing: ${optionalNote.join(', ')}. Produce the final plan now with them left empty and missing_slots = [].`
     );
   const answers = Object.fromEntries(
-    Object.entries(fields).filter(([k]) => !['result_style', 'contacts', 'contacts_checked'].includes(k))
+    Object.entries(fields).filter(
+      ([k]) => !['result_style', 'contacts', 'contacts_checked', 'in_mail_client'].includes(k)
+    )
   );
   if (Object.keys(answers).length) parts.push(`User answers for missing details: ${JSON.stringify(answers)}`);
   if (fields.contacts && !fields.contacts_checked)
@@ -445,7 +451,10 @@ export async function prepare(
         }
         // Only optional details missing (an unknown address, say): one more round to finish without them.
         const missing = Array.isArray(parsed.missing_slots) ? parsed.missing_slots : [];
-        const optional = skill.optional_slots || [];
+        const optional = [
+          ...(skill.optional_slots || []),
+          ...(fields.in_mail_client === 'true' ? ['subject', 'to', 'recipient'] : []),
+        ];
         const required = missing.filter((m) => !optional.some((o) => String(m).toLowerCase().includes(o)));
         if (missing.length && !required.length && !optionalNote) {
           optionalNote = missing;
