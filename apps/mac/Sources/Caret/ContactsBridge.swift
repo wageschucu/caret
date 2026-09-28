@@ -15,11 +15,15 @@ final class ContactsBridge {
   static func names(in sentence: String) -> [String] {
     var found: [String] = []
     let words = sentence.split(whereSeparator: { !$0.isLetter && $0 != "-" && $0 != "'" }).map(String.init)
+    // In German (and in shouting) most words are capitalised; then capitalisation says nothing about names.
+    let capitalisedShare = words.isEmpty ? 0 : Double(words.filter { $0.first!.isUppercase }.count) / Double(words.count)
+    let useCapitals = capitalisedShare < 0.3
+    let cues: Set<String> = ["to", "email", "mail", "message", "ping", "an", "für", "fuer", "cc"]
     for (i, word) in words.enumerated() {
       let lower = word.lowercased()
       if stopWords.contains(lower) || word.count < 2 { continue }
-      let afterCue = i > 0 && ["to", "email", "mail", "message", "ping"].contains(words[i - 1].lowercased())
-      let capitalised = word.first!.isUppercase && i > 0
+      let afterCue = i > 0 && cues.contains(words[i - 1].lowercased())
+      let capitalised = useCapitals && word.first!.isUppercase && i > 0 && !sentence.contains(". " + word) && !sentence.contains("\n" + word)
       if afterCue || capitalised {
         // Join a following capitalised word as a surname.
         var name = word
@@ -29,7 +33,7 @@ final class ContactsBridge {
         if !found.contains(name) { found.append(name) }
       }
     }
-    return Array(found.prefix(4))
+    return Array(found.prefix(3))
   }
 
   private func ensureAccess() async throws -> Bool {

@@ -554,7 +554,9 @@ export async function detectLocalModels({ fetcher = fetch, timeoutMs = 1500 } = 
   if (!isOllama()) return null;
   let data;
   try {
-    const r = await fetcher(baseURL().replace(/\/v1$/, '') + '/api/tags', { signal: AbortSignal.timeout(timeoutMs) });
+    const r = await fetcher(baseURL().replace(/\/v1$/, '') + '/api/tags', {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!r.ok) return null;
     data = await r.json();
   } catch {

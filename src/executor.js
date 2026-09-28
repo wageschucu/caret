@@ -382,6 +382,8 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
     let finalOnly = false;
     let optionalNote = null;
     let conflictNote = null;
+    // Only lookups the model asks for count against the budget; pre-answered ones from the host are free.
+    let requestedCount = 0;
     for (let round = 0; ; round++) {
       progress(
         round === 0
@@ -442,12 +444,16 @@ export async function prepare(skill, state, fields = {}, profile = {}, lookups =
         plan = { ...parsed, usage: r.usage, lookups: lookups.map((l) => l.tool) };
         break;
       }
-      if (lookups.length >= LOOKUP_LIMIT || round >= LOOKUP_LIMIT)
-        throw Error('Too many lookups; try a more specific request');
+      if (requestedCount >= LOOKUP_LIMIT || round >= LOOKUP_LIMIT + 2) {
+        // Budget spent: finish with what has been gathered rather than failing the accept.
+        finalOnly = true;
+        continue;
+      }
       // An unusable request (unknown tool, empty repo) is answered as refused, not thrown: the model
       // then asks the user for the missing detail instead of the whole accept failing.
       const valid = [];
-      for (const q of requested.slice(0, LOOKUP_LIMIT - lookups.length)) {
+      for (const q of requested.slice(0, LOOKUP_LIMIT - requestedCount)) {
+        requestedCount++;
         try {
           valid.push(validateLookup(q, gate.tools));
         } catch (e) {
