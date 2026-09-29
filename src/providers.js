@@ -93,6 +93,8 @@ export async function chat(messages, { model, signal, json = false, maxTokens = 
       hostedExecutorProblem = null;
       return r;
     } catch (e) {
+      // A cancelled accept stops here; it must not restart on the local model.
+      if (signal?.aborted) throw e;
       // Billing, auth, rate limits and outages fall back to the local model; bad requests do not.
       const status = e?.status;
       const retryable =
@@ -375,6 +377,20 @@ async function chatOllama(messages, { model, signal, json, maxTokens }) {
 
 // Plain continuation of the buffer through Ollama's /api/generate with raw prompting. Screen text is
 // deliberately not included: a raw prompt has no way to mark it as data rather than instructions.
+// Ghost text is only worth showing when it is likely right: measured on Paul's own typing, the
+// ungated completer was right about the next word 13% of the time and almost never mid-word.
+export const GHOST_FIRST_WORD_MIN = Number(process.env.GHOST_FIRST_WORD_MIN) || 0.5;
+export const GHOST_NEXT_WORD_MIN = Number(process.env.GHOST_NEXT_WORD_MIN) || 0.5;
+
+// Token healing: a prompt that ends mid-word ("Spanis") or on a space splits tokens where the model
+// never saw them split, so it continues with junk. Back up to before the space/word fragment and
+// require the continuation to start with exactly what was typed.
+export function healPrompt(buffer) {
+  const m = buffer.match(/( ?)([\p{L}\p{N}'’-]*)$/u);
+  if (!m[0]) return { prompt: buffer, typed: '' };
+  return { prompt: buffer.slice(0, buffer.length - m[0].length), typed: m[0] };
+}
+
 async function* streamOllamaRaw(state, model, signal, { fetcher, budgetMs }) {
   const control = new AbortController();
   const combined = AbortSignal.any([
@@ -382,27 +398,69 @@ async function* streamOllamaRaw(state, model, signal, { fetcher, budgetMs }) {
     control.signal,
     AbortSignal.timeout(budgetMs),
   ]);
-  let text = '';
-  try {
-    const response = await fetcher(baseURL().replace(/\/v1$/, '') + '/api/generate', {
+  const endpoint = baseURL().replace(/\/v1$/, '') + '/api/generate';
+  const request = (prompt, stream, options, extra = {}) =>
+    fetcher(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        prompt: state.buffer,
+        prompt,
         raw: true,
-        stream: true,
+        stream,
         keep_alive: '30m',
-        options: { num_predict: 30, temperature: 0.2, stop: ['\n'] },
+        logprobs: true,
+        ...extra,
+        options: { temperature: 0, stop: ['\n'], ...options },
       }),
       signal: combined,
     });
+  try {
+    let { prompt, typed } = healPrompt(state.buffer);
+    if (!prompt.trim()) return; // nothing to go on yet
+    // Forced prefix: pick the likeliest tokens that agree with what was typed. Its probability is
+    // conditional on the typed letters (renormalised over the agreeing candidates).
+    let forced = '',
+      logp = 0;
+    for (let step = 0; forced.length < typed.length && step < 4; step++) {
+      const r = await request(prompt + forced, false, { num_predict: 1 }, { top_logprobs: 20 });
+      if (!r.ok) throw Error(`Completer request failed (${r.status})`);
+      const data = await r.json();
+      const rest = typed.slice(forced.length);
+      const tops = data.logprobs?.[0]?.top_logprobs;
+      const candidates = tops
+        ? tops.filter((t) => t.token && (t.token.startsWith(rest) || rest.startsWith(t.token)))
+        : [{ token: data.response || '', logprob: 0 }].filter(
+            (t) => t.token && (t.token.startsWith(rest) || rest.startsWith(t.token))
+          );
+      if (!candidates.length) return;
+      const total = candidates.reduce((sum, t) => sum + Math.exp(t.logprob), 0);
+      forced += candidates[0].token;
+      logp += candidates[0].logprob - Math.log(total);
+    }
+    if (!forced.startsWith(typed)) return;
+    // Continue word by word; a word is shown only once it is complete and likely enough.
+    let shown = '',
+      word = forced.slice(typed.length),
+      wordLogp = logp,
+      words = 0;
+    const accept = (text, lp) => {
+      const min = words === 0 ? GHOST_FIRST_WORD_MIN : GHOST_NEXT_WORD_MIN;
+      if (Math.exp(lp) < min) return false;
+      if (text) {
+        shown += text;
+        words++;
+      }
+      return true;
+    };
+    const boundaryIn = (text) => text.search(/[.,;:?!]/);
+    const response = await request(prompt + forced, true, { num_predict: 30 });
     if (!response.ok) throw Error(`Completer request failed (${response.status})`);
     const reader = response.body.getReader(),
       decoder = new TextDecoder();
     let pending = '';
     try {
-      while (true) {
+      outer: while (true) {
         const chunk = await reader.read();
         if (chunk.done) break;
         pending += decoder.decode(chunk.value, { stream: true });
@@ -412,14 +470,27 @@ async function* streamOllamaRaw(state, model, signal, { fetcher, budgetMs }) {
           pending = pending.slice(newline + 1);
           if (!line) continue;
           const event = JSON.parse(line);
-          text += event.response || '';
-          const boundary = text.search(/[.,;:?!]/);
-          const stopped = boundary >= 0 || event.done || text.trim().split(/\s+/).length >= 30;
-          if (boundary >= 0) text = text.slice(0, boundary + 1);
-          if (text.trim()) yield { text, mode: 'live', phrase_boundary: boundary >= 0 };
-          if (stopped) return;
+          const token = event.response || '';
+          const lp = event.logprobs?.[0]?.logprob ?? 0; // no logprobs (old Ollama): ungated
+          if (/^\s/.test(token) && word.trim()) {
+            // The previous word is complete: show it or stop here.
+            if (!accept(word, wordLogp)) return;
+            yield { text: shown, mode: 'live', phrase_boundary: false };
+            word = '';
+            wordLogp = 0;
+          }
+          word += token;
+          wordLogp += lp;
+          const b = boundaryIn(word);
+          if (b >= 0) {
+            word = word.slice(0, b + 1);
+            if (accept(word, wordLogp)) yield { text: shown, mode: 'live', phrase_boundary: true };
+            return;
+          }
+          if (event.done || words >= 30) break outer;
         }
       }
+      if (word.trim() && accept(word, wordLogp)) yield { text: shown, mode: 'live', phrase_boundary: false };
     } finally {
       await reader.cancel().catch(() => {});
     }

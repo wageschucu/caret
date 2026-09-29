@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { streamCompletion } from '../src/providers.js';
+import { streamCompletion, healPrompt } from '../src/providers.js';
 test('streaming handles fragmented SSE and stops at punctuation, canceling reader', async () => {
   const old = process.env.COMPLETER_MODEL,
     oldBase = process.env.LLM_BASE_URL;
@@ -39,49 +39,96 @@ test('streaming handles fragmented SSE and stops at punctuation, canceling reade
     else process.env.LLM_BASE_URL = oldBase;
   }
 });
-test('ollama raw completion continues the buffer, stops at punctuation, and never sends screens', async () => {
+// Fake Ollama: the first (non-streaming) call answers the forced-prefix step, the second streams.
+function fakeOllama(tops, stream) {
+  const requests = [];
+  const fetcher = async (url, init) => {
+    const body = JSON.parse(init.body);
+    requests.push({ url, body });
+    if (!body.stream)
+      return { ok: true, json: async () => ({ response: tops[0]?.token || '', logprobs: [{ top_logprobs: tops }] }) };
+    const parts = stream.map((t) => JSON.stringify(t) + '\n');
+    return {
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => ({ done: !parts.length, value: new TextEncoder().encode(parts.shift() || '') }),
+          cancel: async () => {},
+        }),
+      },
+    };
+  };
+  return { fetcher, requests };
+}
+async function ghost(buffer, tops, stream) {
   const old = process.env.COMPLETER_MODEL,
     oldBase = process.env.LLM_BASE_URL;
   process.env.COMPLETER_MODEL = 'tiny';
   process.env.LLM_BASE_URL = 'http://127.0.0.1:11434/v1';
-  let request;
+  const fake = fakeOllama(tops, stream);
   try {
-    const parts = ['{"response":" the"}\n{"response":" gift"}\n', '{"response":". More","done":false}\n'];
-    const fetcher = async (url, init) => {
-      request = { url, body: JSON.parse(init.body) };
-      return {
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: async () => ({ done: !parts.length, value: new TextEncoder().encode(parts.shift() || '') }),
-            cancel: async () => {},
-          }),
-        },
-      };
-    };
-    const chunks = [];
-    for await (const chunk of streamCompletion(
-      { buffer: 'thank you for', screens: [{ text: 'secret' }] },
-      undefined,
-      {
-        fetcher,
-        budgetMs: 1000,
-      }
-    ))
-      chunks.push(chunk);
-    assert.equal(request.url, 'http://127.0.0.1:11434/api/generate');
-    assert.equal(request.body.raw, true);
-    assert.equal(request.body.prompt, 'thank you for');
-    assert(!JSON.stringify(request.body).includes('secret'));
-    assert.equal(chunks.at(-1).text, ' the gift.');
-    assert.equal(chunks.at(-1).phrase_boundary, true);
+    let last = null;
+    for await (const chunk of streamCompletion({ buffer, screens: [{ text: 'secret' }] }, undefined, {
+      fetcher: fake.fetcher,
+      budgetMs: 1000,
+    }))
+      last = chunk;
+    return { last, requests: fake.requests };
   } finally {
     if (old === undefined) delete process.env.COMPLETER_MODEL;
     else process.env.COMPLETER_MODEL = old;
     if (oldBase === undefined) delete process.env.LLM_BASE_URL;
     else process.env.LLM_BASE_URL = oldBase;
   }
+}
+const sure = (token) => ({ response: token, logprobs: [{ token, logprob: -0.05 }] });
+
+test('token healing backs up over a half-typed word or a trailing space', () => {
+  assert.deepEqual(healPrompt('translate into Spanis'), { prompt: 'translate into', typed: ' Spanis' });
+  assert.deepEqual(healPrompt('thank you '), { prompt: 'thank you', typed: ' ' });
+  assert.deepEqual(healPrompt('done.'), { prompt: 'done.', typed: '' });
+  assert.deepEqual(healPrompt('Hallo zusammen,\nKönnten'), { prompt: 'Hallo zusammen,\n', typed: 'Könnten' });
 });
+
+test('ollama raw completion finishes the typed word, stops at punctuation, and never sends screens', async () => {
+  const { last, requests } = await ghost(
+    'translate into Spanis',
+    [
+      { token: ' Spanish', logprob: -0.1 },
+      { token: ' French', logprob: -2 },
+    ],
+    [sure(':'), sure(' more')]
+  );
+  assert.equal(requests[0].url, 'http://127.0.0.1:11434/api/generate');
+  assert.equal(requests[0].body.raw, true);
+  assert.equal(requests[0].body.prompt, 'translate into');
+  assert.equal(requests[1].body.prompt, 'translate into Spanish');
+  assert(!JSON.stringify(requests).includes('secret'));
+  assert.equal(last.text, 'h:');
+  assert.equal(last.phrase_boundary, true);
+});
+
+test('ghost text stops at the first unlikely word and shows nothing when the first is unlikely', async () => {
+  const shown = await ghost('thank you for', [{ token: ' for', logprob: -0.01 }], [
+    sure(' the'),
+    sure(' gift'),
+    { response: ' yesterday', logprobs: [{ token: ' yesterday', logprob: -3 }] },
+    sure('.'),
+  ]);
+  assert.equal(shown.last.text, ' the gift');
+  const none = await ghost('thank you for', [{ token: ' for', logprob: -0.01 }], [
+    { response: ' the', logprobs: [{ token: ' the', logprob: -2 }] },
+    sure(' gift'),
+  ]);
+  assert.equal(none.last, null);
+});
+
+test('no ghost text when no likely token agrees with the typed letters', async () => {
+  const { last, requests } = await ghost('see you tomorr', [{ token: ' today', logprob: -0.1 }], [sure('ow')]);
+  assert.equal(last, null);
+  assert.equal(requests.length, 1);
+});
+
 test('currency conversion uses the reference-rate service and labels the result', async () => {
   const { convertCurrency } = await import('../src/providers.js');
   let url;
@@ -312,4 +359,28 @@ test('ollama with only embedding models fills nothing', () =>
     const r = await applyLocalDefaults({ fetcher: tags([{ name: 'nomic-embed-text', size: 2e8 }]) });
     assert.equal(r.reachable, true);
     assert.deepEqual(r.filled, {});
+  }));
+
+test('a cancelled hosted request never falls back to the local model', () =>
+  withEnv({ EXECUTOR_PROVIDER: 'anthropic', LLM_FALLBACK_MODEL: 'llama3.1:8b' }, async () => {
+    const { chat } = await import('../src/providers.js');
+    const savedFetch = globalThis.fetch,
+      savedKey = process.env.ANTHROPIC_API_KEY;
+    const urls = [];
+    globalThis.fetch = async (url, init) => {
+      urls.push(String(url));
+      init?.signal?.throwIfAborted();
+      throw Object.assign(Error('offline'), { name: 'TypeError' });
+    };
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const control = new AbortController();
+    control.abort();
+    try {
+      await assert.rejects(chat([{ role: 'user', content: 'x' }], { model: 'claude-haiku-4-5', signal: control.signal }));
+      assert.ok(!urls.some((u) => u.includes('11434')), `fell back to Ollama: ${urls.join(', ')}`);
+    } finally {
+      globalThis.fetch = savedFetch;
+      if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = savedKey;
+    }
   }));

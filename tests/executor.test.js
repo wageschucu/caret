@@ -273,3 +273,29 @@ test('a calendar slot overlapping a busy period is detected', async () => {
   assert.equal(busyConflict(plan('2026-09-26T16:00:00+02:00', '2026-09-26T17:00:00+02:00'), lookups), null);
   assert.equal(busyConflict({ calls: [] }, lookups), null);
 });
+
+test('a cancelled accept stops planning before any model call', async () => {
+  const { prepare } = await import('../src/executor.js');
+  const old = process.env.LLM_MODEL;
+  process.env.LLM_MODEL = 'model-that-does-not-exist';
+  const control = new AbortController();
+  control.abort();
+  try {
+    const skill = {
+      slug: 'draft-email',
+      trust: 'trusted',
+      side_effect_class: 'reversible',
+      allowed_tools: ['mail.draft'],
+      context: ['buffer'],
+      body: '',
+      version: '1',
+    };
+    await assert.rejects(
+      prepare(skill, { buffer: 'email peg thanks' }, {}, {}, [], () => {}, { signal: control.signal }),
+      (e) => e.name === 'AbortError'
+    );
+  } finally {
+    if (old === undefined) delete process.env.LLM_MODEL;
+    else process.env.LLM_MODEL = old;
+  }
+});

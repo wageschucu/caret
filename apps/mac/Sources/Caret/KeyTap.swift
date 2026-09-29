@@ -24,9 +24,10 @@ final class KeyTap {
     var canPropose = false
     var variantCount = 0  // destination options under the highlighted chip
     var styleCount = 0  // second option row (⌥← ⌥→)
+    var planning = false  // an accepted skill is being planned; Esc cancels it
   }
   enum Action {
-    case accept, dismiss, ghostWord, cycle(Int), propose, variant(Int), style(Int)
+    case accept, dismiss, ghostWord, cycle(Int), propose, variant(Int), style(Int), cancelPlanning
   }
 
   var onAction: (Action) -> Void = { _ in }
@@ -53,6 +54,8 @@ final class KeyTap {
   var isRunning: Bool { port != nil }
 
   static func decide(_ e: Event, _ s: State) -> Action? {
+    // While an accepted skill is planning, a plain Esc cancels it (the field is not active then).
+    if s.planning, e.key == .escape, !e.command, !e.control, !e.option, !e.shift { return .cancelPlanning }
     guard s.active, let key = e.key else { return nil }
     // ⌘⇧N proposes a skill; it is the only command-key combination Caret ever takes.
     if key == .n && e.command && e.shift && !e.control && !e.option { return s.canPropose ? .propose : nil }

@@ -354,7 +354,7 @@ export async function prepare(
   profile = {},
   lookups = [],
   progress = () => {},
-  { forceFinal = false } = {}
+  { forceFinal = false, signal = null } = {}
 ) {
   const gate = permission(skill),
     context = forwardContext(skill, state);
@@ -402,6 +402,7 @@ export async function prepare(
     let requestedCount = lookups.filter((l) => !l.seeded).length;
     if (forceFinal) finalOnly = true;
     for (let round = 0; ; round++) {
+      signal?.throwIfAborted();
       progress(
         round === 0
           ? 'Reading the request'
@@ -417,7 +418,7 @@ export async function prepare(
             content: executorInput(context, fields, lookups, finalOnly, optionalNote, conflictNote),
           },
         ],
-        { model: process.env.LLM_MODEL, json: true }
+        { model: process.env.LLM_MODEL, json: true, signal }
       );
       let parsed;
       try {

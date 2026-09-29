@@ -329,8 +329,9 @@ export async function createApp({
             profile,
             lookups,
             (text) => emit({ progress: text }),
-            { forceFinal: body.final === true }
+            { forceFinal: body.final === true, signal: controller.signal }
           );
+          if (controller.signal.aborted) throw Object.assign(Error('Cancelled'), { name: 'AbortError' });
           if (prepared.needs) {
             await log({
               type: 'interaction',
@@ -343,6 +344,12 @@ export async function createApp({
             emit(await executions.accept(prepared, event.id, sessionId, hostToolsOf(body)));
           }
         } catch (e) {
+          if (controller.signal.aborted) {
+            // The user pressed Esc while planning: nothing is executed or shown.
+            await log({ type: 'interaction', routing_event_id: event.id, skill: skill.slug, action: 'cancel' });
+            res.end();
+            return;
+          }
           emit({ error: redact(e.message) });
         }
         res.end();

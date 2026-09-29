@@ -61,6 +61,10 @@ final class Controller {
   private var previousApp: NSRunningApplication?
   private var slotAnswers: [String: String] = [:]
   private var busy = false
+  /// The accept currently planning, so Esc can cancel it; the generation keeps a cancelled one from
+  /// touching the state of a later accept.
+  private var acceptTask: Task<Void, Never>?
+  private var acceptGeneration = 0
   private var working: String?
   private var lastWarning: String?
 
@@ -398,7 +402,8 @@ final class Controller {
   private func syncKeyState() {
     tap.state = KeyTap.State(
       active: snapshot != nil && preview == nil && !busy, hasGhost: !ghost.isEmpty, chipCount: chips.count,
-      tabSafe: tabSafe, canPropose: canPropose, variantCount: variants.count, styleCount: styles.count)
+      tabSafe: tabSafe, canPropose: canPropose, variantCount: variants.count, styleCount: styles.count,
+      planning: acceptTask != nil)
   }
 
   private func render() {
@@ -415,7 +420,7 @@ final class Controller {
     overlay.show(
       ghost: ghost,
       chips: chips.enumerated().map { (label: client.label(for: $0.element), selected: $0.offset == chosen) },
-      acceptKey: acceptKeyName, anchor: anchor, working: working,
+      acceptKey: acceptKeyName, anchor: anchor, working: working.map { acceptTask != nil ? $0 + "   Esc cancels" : $0 },
       hint: canPropose ? "⌘⇧N  create a skill for this?" : nil,
       variants: variants.enumerated().map { (label: $0.element, selected: $0.offset == variantIndex) },
       styles: styles.enumerated().map { (label: $0.element.label, selected: $0.offset == styleIndex) })
@@ -425,11 +430,16 @@ final class Controller {
 
   /// Actions the key tap already decided to swallow, delivered on the main thread.
   private func perform(_ action: KeyTap.Action) {
+    if case .cancelPlanning = action {
+      cancelPlanning()
+      return
+    }
     guard preview == nil, !busy, snapshot != nil else { return }
     switch action {
     case .dismiss: dismiss()
     case .accept: accept()
     case .ghostWord: insertGhost(wordOnly: true)
+    case .cancelPlanning: break
     case .propose: proposeSkill()
     case .variant(let step):
       guard variants.count > 1 else { return }
@@ -489,7 +499,9 @@ final class Controller {
     working = client.label(for: skill) + "…"
     render()
     previousApp = NSWorkspace.shared.frontmostApplication
-    Task {
+    acceptGeneration += 1
+    let generation = acceptGeneration
+    acceptTask = Task {
       do {
         // Skills that draft mail get the address-book matches for names in the sentence.
         if client.skill(skill)?.allowed_tools?.contains("mail.draft") == true {
@@ -505,8 +517,9 @@ final class Controller {
         let label = client.label(for: skill)
         let progress: (String) -> Void = { [weak self] text in
           Task { @MainActor in
-            self?.working = "\(label): \(text)…"
-            self?.render()
+            guard let self, generation == self.acceptGeneration else { return }  // cancelled meanwhile
+            self.working = "\(label): \(text)…"
+            self.render()
           }
         }
         var execution = try await client.prepare(
@@ -537,26 +550,51 @@ final class Controller {
             }
             lookups.append(["tool": tool, "args": args, "result": result])
           }
+          try Task.checkCancellation()
           working = client.label(for: skill) + "… (looking up)"
           render()
           execution = try await client.prepare(
             eventID: eventID, skill: skill, buffer: buffer, fields: fields, previous: nil, lookups: lookups,
             final: rounds >= 2, onProgress: progress)  // last round: finish with what has been gathered
         }
+        try Task.checkCancellation()
+        // Planning is done: from here the preview or the host tool owns the keys, not the cancel.
+        if generation == acceptGeneration {
+          acceptTask = nil
+          render()
+        }
         if execution.status == "needs" {
           previewPanel.showError("Caret could not finish this after several lookups. Try a more specific sentence.")
         } else {
           await show(execution)
         }
+      } catch where Task.isCancelled || Self.isCancellation(error) {
+        Diagnostics.log("prepare cancelled for \(skill)")
       } catch {
         Diagnostics.log("prepare failed for \(skill): \(error.localizedDescription)")
         previewPanel.showError(error.localizedDescription)
       }
+      guard generation == acceptGeneration else { return }  // cancelled; a later accept owns the state
+      acceptTask = nil
       busy = false
       working = nil
       render()
       syncKeyState()
     }
+    render()  // shows "Esc cancels" and lets the key tap take Esc
+  }
+
+  /// Esc while a skill is planning: stop it. Closing the request makes the helper abort the model call
+  /// and log the cancel; nothing is executed or shown, and the typed text stays as it was.
+  private func cancelPlanning() {
+    guard let task = acceptTask else { return }
+    task.cancel()
+    acceptTask = nil
+    acceptGeneration += 1
+    busy = false
+    working = nil
+    render()
+    syncKeyState()
   }
 
   // MARK: - Skill proposals (spec §7.4)
