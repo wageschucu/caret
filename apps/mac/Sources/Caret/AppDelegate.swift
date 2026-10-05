@@ -106,7 +106,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  func applicationWillTerminate(_ notification: Notification) { controller.launcher.stop() }
+  func applicationWillTerminate(_ notification: Notification) {
+    controller.launcher.stop()  // the helper unloads its models as it stops
+    controller.localModels.stop()
+  }
   @objc private func copyState() {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(controller.lastStateJSON, forType: .string)

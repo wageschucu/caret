@@ -10,6 +10,7 @@ import {
   streamCompletion,
   draftSkill,
   keepModelsWarm,
+  releaseModels,
   applyLocalDefaults,
   detectedDefaults,
   hostedExecutorProblem,
@@ -520,7 +521,23 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         `; ${stillDemo.join(' and ')} ${stillDemo.length > 1 ? 'stay' : 'stays'} in demo mode. ` +
         'Pull a model (see README) or set the model in .env.'
     );
-  keepModelsWarm();
+  const warm = keepModelsWarm();
+  // Stopping the helper also unloads its models from Ollama; nothing of Caret stays in memory.
+  let closing = false;
+  const shutdown = async (why) => {
+    if (closing) return;
+    closing = true;
+    clearInterval(warm);
+    console.log(`Helper stopping (${why}); releasing local models.`);
+    server.close();
+    await releaseModels();
+    process.exit(0);
+  };
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => shutdown(signal));
+  // Started by the app: if the app dies without stopping the helper, the helper is re-parented to
+  // launchd (pid 1) and stops itself instead of keeping models warm forever.
+  if (process.ppid !== 1)
+    setInterval(() => process.ppid === 1 && shutdown('the app that started it is gone'), 5000).unref();
   server.listen(Number(process.env.PORT) || 4317, '127.0.0.1', () =>
     console.log(`SkillRouter: http://127.0.0.1:${server.address().port}`)
   );

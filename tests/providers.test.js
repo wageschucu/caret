@@ -384,3 +384,21 @@ test('a cancelled hosted request never falls back to the local model', () =>
       else process.env.ANTHROPIC_API_KEY = savedKey;
     }
   }));
+
+test('stopping the helper unloads the ghost-text and fallback models', () =>
+  withEnv(
+    { EXECUTOR_PROVIDER: 'anthropic', COMPLETER_MODEL: 'llama3.2:1b', LLM_FALLBACK_MODEL: 'llama3.1:8b' },
+    async () => {
+      const { releaseModels } = await import('../src/providers.js');
+      const sent = [];
+      await releaseModels({ fetcher: async (url, init) => sent.push({ url, ...JSON.parse(init.body) }) });
+      assert.deepEqual(
+        sent.map((r) => [r.model, r.keep_alive]).sort(),
+        [
+          ['llama3.1:8b', 0],
+          ['llama3.2:1b', 0],
+        ]
+      );
+      assert.ok(sent.every((r) => r.url.endsWith(':11434/api/generate')));
+    }
+  ));

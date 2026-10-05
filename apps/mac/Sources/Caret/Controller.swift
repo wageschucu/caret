@@ -35,6 +35,7 @@ final class Controller {
   private let contacts = ContactsBridge()
   private let mail = MailBridge()
   let launcher = HelperLauncher()
+  let localModels = LocalModelServer()
   /// Host-side undo for the last calendar event created through EventKit.
   private var calendarUndo: (helperID: String, eventID: String)?
   /// When composing in one of these, a draft replaces the typed instruction instead of opening a new window.
@@ -124,6 +125,7 @@ final class Controller {
   }
 
   private func connect() async {
+    await localModels.startIfNeeded()  // once per run; the helper warms its models there
     do {
       let boot = try await client.bootstrap()
       connected = true

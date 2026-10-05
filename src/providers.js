@@ -671,14 +671,33 @@ export async function applyLocalDefaults(options = {}) {
   return { wanted, filled, reachable: true };
 }
 
-export function keepModelsWarm({ fetcher = fetch, intervalMs = 4 * 60 * 1000 } = {}) {
-  if (!isOllama()) return null;
+// The local models Caret keeps loaded: the ghost-text model and the local (or fallback) executor.
+function warmModels() {
+  if (!isOllama()) return [];
   const executorLocal = process.env.EXECUTOR_PROVIDER !== 'anthropic';
-  const models = [
+  return [
     ...new Set(
       [process.env.COMPLETER_MODEL, executorLocal ? process.env.LLM_MODEL : FALLBACK_MODEL()].filter(Boolean)
     ),
   ];
+}
+
+// Unloads the warm models (keep_alive 0) so they do not hold memory after the helper stops.
+export async function releaseModels({ fetcher = fetch } = {}) {
+  await Promise.all(
+    warmModels().map((model) =>
+      fetcher(baseURL().replace(/\/v1$/, '') + '/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, keep_alive: 0 }),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {})
+    )
+  );
+}
+
+export function keepModelsWarm({ fetcher = fetch, intervalMs = 4 * 60 * 1000 } = {}) {
+  const models = warmModels();
   if (!models.length) return null;
   const ping = async () => {
     for (const model of models)
